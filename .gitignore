@@ -1,0 +1,10 @@
+data/*
+!data/*/
+!data/*/.gitkeep
+checkpoints/
+*.safetensors
+_submission_staging/
+submission.zip
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

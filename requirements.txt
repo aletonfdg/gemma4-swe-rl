@@ -1,0 +1,12 @@
+torch>=2.3
+transformers>=4.44
+peft>=0.12
+accelerate>=0.33
+vllm>=0.6.0
+compressed-tensors
+networkx
+numpy
+pyyaml
+openai>=1.40
+requests
+bitsandbytes

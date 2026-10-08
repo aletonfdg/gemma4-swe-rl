@@ -1,0 +1,97 @@
+model:
+  id: "gemma-4-31b-it-qat-w4a16-ct"
+  attn_implementation: "sdpa"
+  max_seq_length: 32768                # согласовано с vllm.max_model_len харнесса (было 8192 -- баг)
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+tool_lora:
+  r: 16                 # меньше, чем lora (main_lora) -- задача локализации уже проще full-agent
+  alpha: 32
+  dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+paths:
+  tasks_jsonl: "data/tasks.jsonl"
+  snapshots_dir: "data/snapshots"
+  graphs_dir: "data/graphs"
+  embeddings_dir: "data/embeddings"
+  checkpoints_dir: "checkpoints"
+  sft_data_out: "data/sft_trajectories.jsonl"
+  sft_adapter_out: "checkpoints/sft_warm_start"
+  tool_sft_adapter_out: "checkpoints/tool_sft_warm_start"
+  tool_sft_data_out: "data/tool_sft_trajectories.jsonl"
+  sample_submission_dir: "data/sample_submission"   # NEW — для сверки схемы
+
+env_budget:
+  # Дефолты ХАРНЕССА (scripts/inference.py), используются для "общей" тренировки.
+  # Для реалистичного под-12h-бюджета эпизодов используется eval_config.yaml (ниже).
+  max_tool_calls: 100
+  max_time_minutes: 60
+  max_turns: 500
+  command_timeout_seconds: 300
+  max_stdout_chars: 5000
+  max_file_lines: 150
+  max_file_chars: 10000
+  enable_sandbox_testing: true
+
+sampling:            # подтверждено из sample_submission/configs/sampling.yaml
+  temperature: 0.2
+  top_p: 0.95
+  max_output_tokens: 16384
+  thinking_budget: 4096
+  include_thoughts: true
+
+sft:
+  teacher_temperature: 0.7
+  rollouts_per_task: 6
+  min_reward_to_keep: 1.0
+  epochs: 3
+  lr: 1e-4
+  batch_size: 1
+  grad_accum_steps: 16
+
+gigpo:
+  group_size: 8
+  tasks_per_step: 1
+  micro_batch_size: 1
+  lr: 1e-5
+  kl_coef: 0.02
+  clip_eps_low: 0.2
+  clip_eps_high: 0.28
+  gamma: 0.95
+  micro_weight: 1.0
+  rollout_temperature: 0.9
+  num_steps: 2000
+  save_every: 20
+  eval_every: 50
+  held_out_fraction: 0.15
+  # доля шагов, где curriculum форсирует "боевой" (eval_config.yaml) бюджет вместо щедрого
+  tight_budget_fraction: 0.3
+  eval_temperature: 0.2   # было 0.0 -- несовпадение с реальным sampling.yaml (temperature: 0.2)
+
+vllm:
+  gpu_memory_utilization: 0.55   # делим карту с HF-тренировочной копией на одном A100
+  max_model_len: 32768
+  enable_lora: true
+  max_lora_rank: 64
+  tool_call_parser: "gemma4"
+  reasoning_parser: "gemma4"
+  port: 8000
+
+docker:
+  image: "swebench-sandbox:latest"
+  wheels_dir: "data/wheels"              # было верно
+  sandbox_scripts_dir: "data/sandbox"    # содержит ТОЛЬКО setup.py — Dockerfile'ы в data/docker/
+  dockerfiles_dir: "data/docker"         # NEW — для build_sandbox_image.sh
+  mem_limit: "4g"
+  cpus: 2.0
+  network: "none"
+
+memory:
+  alloc_conf: "expandable_segments:True,garbage_collection_threshold:0.8"
+  use_8bit_optimizer: false

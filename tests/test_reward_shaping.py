@@ -30,6 +30,30 @@ def test_failing_run_reads_stdout_from_details():
                command="pytest -q tests/") == 2.0 + 2.0 - 2.0
 
 
+EDIT_OK = json.dumps({"status": "ok", "filepath": "a.py", "occurrences": 1})
+EDIT_ARGS = {"filepath": "a.py", "old_string": "x", "new_string": "y"}
+
+
+def test_rerunning_same_test_command_after_an_edit_is_not_a_loop():
+    t = RewardTracker({})
+    assert run(t, pytest_obs("5 passed in 0.1s", ok=True)) == 5.0
+    assert t.on_step("edit_file", EDIT_ARGS, EDIT_OK) == 0.0
+    # тот же pytest после правки: без loop_penalty; только бонус за запуск после правки (+2)
+    assert run(t, pytest_obs("5 passed in 0.1s", ok=True)) == 2.0
+
+
+def test_rerunning_same_command_without_edit_is_still_a_loop():
+    t = RewardTracker({})
+    run(t, pytest_obs("5 passed in 0.1s", ok=True))
+    assert run(t, pytest_obs("5 passed in 0.1s", ok=True)) == RewardTracker.R["loop_penalty"]
+
+
+def test_repeating_an_identical_edit_is_still_a_loop():
+    t = RewardTracker({})
+    assert t.on_step("edit_file", EDIT_ARGS, EDIT_OK) == 0.0
+    assert t.on_step("edit_file", EDIT_ARGS, EDIT_OK) == RewardTracker.R["loop_penalty"]
+
+
 def test_error_without_details_does_not_crash():
     t = RewardTracker({})
     obs = json.dumps({"status": "error", "error_type": "TimeoutExceeded",

@@ -31,6 +31,7 @@ class RewardTracker:
         self.visited_correct_files = set()
         self.visited_correct_symbols = set()
         self.action_history = deque(maxlen=self.LOOP_WINDOW)
+        self.edit_epoch = 0   # растёт при каждой успешной правке кода: повтор после правки не цикл
         self.test_run_count = 0
         self.code_changed_since_last_test = False
         self.last_test_state = {"passed": 0, "failed": 0}
@@ -40,7 +41,10 @@ class RewardTracker:
 
     def on_step(self, tool_name, tool_args, tool_result):
         reward = 0.0
-        sig = (tool_name, json.dumps(tool_args, sort_keys=True))
+        # результат run_command/read_file зависит от состояния кода, поэтому тот же вызов после
+        # успешной правки (другая эпоха) -- это проверка, а не зацикливание
+        epoch = self.edit_epoch if tool_name in ("run_command", "read_file") else None
+        sig = (tool_name, json.dumps(tool_args, sort_keys=True), epoch)
         if sig in self.action_history:
             reward += self.R["loop_penalty"]
         self.action_history.append(sig)
@@ -64,8 +68,10 @@ class RewardTracker:
             reward += self.R["edit_file_error"] if status == "error" else 0.0
             if status == "ok":
                 self.code_changed_since_last_test = True
+                self.edit_epoch += 1
         if tool_name == "write_file" and status == "ok":
             self.code_changed_since_last_test = True
+            self.edit_epoch += 1
             fp = tool_args.get("filepath", "")
             if fp.startswith("/workspace/") is False and not fp.startswith("/tmp"):
                 pass  # оставлено как хук: see scratch-file leak check at submit_patch time

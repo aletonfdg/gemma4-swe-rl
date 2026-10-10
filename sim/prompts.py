@@ -53,7 +53,9 @@ def workspace_layout(workdir: str, max_entries: int = 150) -> str:
 
 
 def build_agent_prompt(task: dict, workdir: str, budget, harness, has_graph: bool,
-                        enable_sandbox_testing: bool = True) -> str:
+                        enable_sandbox_testing: bool = True, layout: str | None = None) -> str:
+    """layout -- готовый текст дерева файлов (для удалённой песочницы, где workdir не существует
+    на этой машине); None = посчитать локально через workspace_layout(workdir)."""
     sections = [
         f"You are evaluating a software engineering task for repository {task['repo']}.\n\n"
         f"Problem Statement:\n{task['problem_statement']}"
@@ -89,5 +91,5 @@ def build_agent_prompt(task: dict, workdir: str, budget, harness, has_graph: boo
     if has_graph:
         sections.append(CODE_INTEL_BLOCK)
 
-    sections.append(f"## Workspace Layout\n{workspace_layout(workdir)}")
+    sections.append(f"## Workspace Layout\n{layout if layout is not None else workspace_layout(workdir)}")
     return "\n\n".join(sections)

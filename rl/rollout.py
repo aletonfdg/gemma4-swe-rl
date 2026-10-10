@@ -135,9 +135,13 @@ def run_episode(env: SWEEnv, task_idx: int, llm_client, snapshots_dir: str, dock
     hit_budget = not env.ctx.patch_submitted and env.ctx.budget_exhausted()
     patch = env.finalize()
 
-    verifier_passed = verify_task(env.task, patch, snapshots_dir, docker_cfg)
+    if hasattr(env, "verify"):   # удалённая песочница MiMo сама считает награду (sim/mimo_env.py)
+        verifier_passed = env.verify(patch)
+    else:
+        verifier_passed = verify_task(env.task, patch, snapshots_dir, docker_cfg)
 
-    final_r = tracker.terminal_reward(verifier_passed, hit_budget_limit=hit_budget, sandbox_crashed=False)
+    final_r = tracker.terminal_reward(verifier_passed, hit_budget_limit=hit_budget,
+                                      sandbox_crashed=getattr(env, "crashed", False))
     if steps:
         steps[-1]["reward"] += final_r
     else:

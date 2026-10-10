@@ -23,11 +23,20 @@ from collections import defaultdict
 COMP = "gemma-4-developer-agent"
 
 
-def setup_kaggle_auth(username=None, key=None):
+def setup_kaggle_auth(username=None, key=None, token=None):
     """Приоритет: аргументы -> переменные окружения -> kaggle.json.
+    Новый формат токена (KGAT_...) -> KAGGLE_API_TOKEN; старый -> KAGGLE_USERNAME + KAGGLE_KEY.
     Ключ НЕ хранить в коде, который коммитится: передавать из ячейки ноутбука."""
+    if token:
+        os.environ["KAGGLE_API_TOKEN"] = token
     if username and key:
         os.environ["KAGGLE_USERNAME"], os.environ["KAGGLE_KEY"] = username, key
+    # частая ошибка: пробелы/кавычки/перевод строки при копировании
+    for var in ("KAGGLE_API_TOKEN", "KAGGLE_USERNAME", "KAGGLE_KEY"):
+        if os.environ.get(var):
+            os.environ[var] = os.environ[var].strip().strip("'\"")
+    if os.environ.get("KAGGLE_API_TOKEN"):
+        return
     if os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"):
         return
     dst = os.path.expanduser("~/.kaggle/kaggle.json")
@@ -80,10 +89,23 @@ def main():
     ap.add_argument("--wheels", action="store_true", help="скачать все wheels (нужны для офлайн-установки)")
     ap.add_argument("--kaggle-username", default=None)
     ap.add_argument("--kaggle-key", default=None)
+    ap.add_argument("--kaggle-token", default=None, help="токен нового формата KGAT_...")
     args = ap.parse_args()
 
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kaggle"], check=True)
-    setup_kaggle_auth(args.kaggle_username, args.kaggle_key)
+    setup_kaggle_auth(args.kaggle_username, args.kaggle_key, args.kaggle_token)
+
+    # проверка учётных данных до скачивания: отличаем 401 (ключ) от 403 (правила не приняты)
+    probe = subprocess.run(["kaggle", "competitions", "files", "-c", COMP, "--page-size", "1"],
+                           capture_output=True, text=True)
+    if probe.returncode != 0:
+        err = (probe.stdout + probe.stderr).strip()
+        if "401" in err or "Unauthorized" in err:
+            sys.exit("401: Kaggle не принял ключ. Создайте НОВЫЙ токен (Settings -> API) и передайте:\n"
+                     "  токен KGAT_... -> KAGGLE_API_TOKEN\n  старый формат -> KAGGLE_USERNAME + KAGGLE_KEY\n" + err)
+        if "403" in err or "Forbidden" in err:
+            sys.exit("403: примите правила на странице конкурса (Join / I Understand and Accept).\n" + err)
+        sys.exit("Проверка доступа к Kaggle не прошла:\n" + err)
     d = args.data_dir
 
     for f in ("tasks.jsonl", "HARNESS_README.md", "docker/Dockerfile.sandbox",

@@ -57,7 +57,7 @@ def main():
         for _ in range(G["group_size"]):
             steps, messages, passed = run_episode(
                 env, task_idx, client, CFG["paths"]["snapshots_dir"], CFG["docker"],
-                temperature=G["rollout_temperature"], lora_name=CURRENT_LORA_NAME,
+                temperature=G["rollout_temperature"], main_lora_name=CURRENT_LORA_NAME,
                 force_tight_budget=use_tight,
             )
             group_steps.append(steps)
@@ -123,7 +123,7 @@ def evaluate(env, eval_indices, client, G):
     passed_count = 0
     for idx in eval_indices:
         _, _, passed = run_episode(env, idx, client, env.snapshots_dir, CFG["docker"],
-                                    temperature=0.0, lora_name=CURRENT_LORA_NAME,
+                                    temperature=G["eval_temperature"], main_lora_name=CURRENT_LORA_NAME,
                                     force_tight_budget=True)
         passed_count += int(passed)
     rate = passed_count / max(1, len(eval_indices))

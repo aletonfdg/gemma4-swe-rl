@@ -52,8 +52,12 @@ def _run_analyzer_subcall(env, llm_client, request_text, analyzer_lora_name,
 
 
 def run_episode(env: SWEEnv, task_idx: int, llm_client, snapshots_dir: str, docker_cfg,
-                 temperature=0.9, main_lora_name="main_lora", analyzer_lora_name="tool_lora",
+                 temperature=0.9, main_lora_name: str | None = None,
+                 analyzer_lora_name: str | None = None,
                  force_tight_budget: bool | None = None, collect_analyzer_steps=False):
+    """main_lora_name / analyzer_lora_name -- имена адаптеров, РЕАЛЬНО зарегистрированных в
+    vLLM (--lora-modules). None = базовая модель. Раньше по умолчанию стояли "main_lora" и
+    "tool_lora", которых сервер не знает (404), поэтому collect_trajectories и RL падали."""
     prompt = env.reset(task_idx, force_tight_budget=force_tight_budget)
     task_id = env.task["instance_id"]
     tracker = RewardTracker(env.task)

@@ -81,16 +81,5 @@ def build_optimizer(model, lr: float):
     return torch.optim.AdamW(params, lr=lr)
 
 
-def compute_logprobs(model, input_ids: torch.Tensor) -> torch.Tensor:
-    logits = model(input_ids=input_ids).logits[:, :-1]
-    targets = input_ids[:, 1:]
-    logp = torch.log_softmax(logits.float(), dim=-1)
-    return logp.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
-
-
-def compute_ref_logprobs(model, input_ids: torch.Tensor) -> torch.Tensor:
-    """Reference policy = та же модель с отключённым LoRA -- без второй копии весов."""
-    with torch.no_grad(), model.disable_adapter():
-        logp = compute_logprobs(model, input_ids).detach().clone()
-    memory_utils.hard_cleanup()
-    return logp
+from rl.logprobs import token_logprobs as compute_logprobs  # noqa: E402 -- chunked, только токены ассистента
+from rl.logprobs import ref_token_logprobs as compute_ref_logprobs  # noqa: E402

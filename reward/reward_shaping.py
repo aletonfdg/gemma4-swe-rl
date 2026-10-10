@@ -96,7 +96,9 @@ class RewardTracker:
 
     def _test_reward(self, parsed):
         reward = 0.0
-        out = (parsed.get("stdout", "") or "") + (parsed.get("stderr", "") or "")
+        # у упавшего pytest (status=error, CommandError) вывод лежит в parsed["details"]
+        src = parsed if "stdout" in parsed or "stderr" in parsed else (parsed.get("details") or {})
+        out = (src.get("stdout", "") or "") + (src.get("stderr", "") or "")
         if self.code_changed_since_last_test and self.test_run_count < self.MAX_TEST_RUN_BONUSES:
             reward += self.R["test_run_bonus"]
         self.test_run_count += 1

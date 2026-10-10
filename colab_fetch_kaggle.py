@@ -51,15 +51,20 @@ def setup_kaggle_auth(username=None, key=None, token=None):
     os.chmod(dst, 0o600)
 
 
-def fetch(remote_path, data_dir):
-    """Качает один файл соревнования в data_dir/<remote_path>. Пропускает уже скачанное."""
+def fetch(remote_path, data_dir, required=True):
+    """Качает один файл соревнования в data_dir/<remote_path>. Пропускает уже скачанное.
+    required=False: при ошибке (например 404) возвращает None вместо падения."""
     local = os.path.join(data_dir, remote_path)
     if os.path.exists(local) and os.path.getsize(local) > 0:
         return local
     out_dir = os.path.dirname(local)
     os.makedirs(out_dir, exist_ok=True)
-    subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-f", remote_path,
-                    "-p", out_dir, "-q"], check=True)
+    r = subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-f", remote_path,
+                        "-p", out_dir, "-q"], capture_output=True, text=True)
+    if r.returncode != 0 and not required:
+        return None
+    if r.returncode != 0:
+        sys.exit(f"Ошибка скачивания {remote_path}:\n{r.stdout}{r.stderr}")
     # CLI иногда отдаёт <name>.zip -- распаковываем
     zipped = local + ".zip"
     if os.path.exists(zipped):
@@ -67,6 +72,8 @@ def fetch(remote_path, data_dir):
             z.extractall(out_dir)
         os.remove(zipped)
     if not os.path.exists(local):
+        if not required:
+            return None
         sys.exit(f"Не удалось получить {remote_path} (проверьте, что правила конкурса приняты)")
     return local
 
@@ -92,7 +99,7 @@ def main():
     ap.add_argument("--kaggle-token", default=None, help="токен нового формата KGAT_...")
     args = ap.parse_args()
 
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kaggle"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "kaggle"], check=True)
     setup_kaggle_auth(args.kaggle_username, args.kaggle_key, args.kaggle_token)
 
     # проверка учётных данных до скачивания: отличаем 401 (ключ) от 403 (правила не приняты)
@@ -117,10 +124,23 @@ def main():
     print(f"tasks.jsonl: {len(tasks)} задач")
     chosen = pick_tasks(tasks, args.per_repo)
 
+    # диагностика: реальные имена файлов на сервере (первые страницы листинга)
+    lst = subprocess.run(["kaggle", "competitions", "files", "-c", COMP, "--page-size", "200"],
+                         capture_output=True, text=True)
+    with open(os.path.join(d, "files_listing.txt"), "w", encoding="utf-8") as lf:
+        lf.write(lst.stdout + lst.stderr)
+
     for t in chosen:
         iid = t["instance_id"]
-        for sub, ext in (("snapshots", "tgz"), ("graphs", "json"), ("embeddings", "npz")):
-            fetch(f"{sub}/{iid}.{ext}", d)
+        fetch(f"snapshots/{iid}.tgz", d)
+        short = iid.rsplit("_", 1)[0]
+        for sub, ext in (("graphs", "json"), ("embeddings", "npz")):
+            got = (fetch(f"{sub}/{iid}.{ext}", d, required=False) or
+                   fetch(f"{sub}/{short}_{t['base_commit']}.{ext}", d, required=False))
+            if got is None:
+                print(f"  ! нет {sub} для {iid} (ни по имени задачи, ни по коммиту)")
+            elif not got.endswith(f"{iid}.{ext}"):
+                shutil.copy(got, os.path.join(d, sub, f"{iid}.{ext}"))  # единое имя для sim/
         print("OK", iid)
 
     if args.wheels:

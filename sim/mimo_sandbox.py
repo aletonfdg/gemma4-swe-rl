@@ -334,7 +334,10 @@ def verify_patch(runner, task, patch, mem="4g", cpus=2.0, image_prefix=REGISTRY,
             return {"passed": False, "reason": "test_patch_failed", "infra_error": True,
                     "tail": _lossy(err).splitlines()[-8:]}
         limit = min(int(task.get("verifier_timeout_sec", timeout_cap)), timeout_cap)
-        argv = ["bash", "mimo_test_command.sh"]
+        # настоящая команда задачи: у 19% задач это `... base && ... new` (без аргумента скрипт печатает
+        # usage и выходит с 2, то есть верный патч не мог пройти); login-оболочка, как у команд агента
+        # (…) 2>&1: хвост вывода показывает реальный порядок строк, а не «stdout, потом весь stderr»
+        argv = ["bash", "-lc", f"({task.get('test_command') or 'bash /testbed/mimo_test_command.sh'}) 2>&1"]
         if sess.has_timeout:
             argv = ["timeout", "-k", "5", str(limit), *argv]
         rc, out, err = sess.exec_bytes(argv, timeout=limit + 30)

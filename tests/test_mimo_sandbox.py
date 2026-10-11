@@ -147,6 +147,42 @@ def test_correct_fix_passes_in_fresh_container(docker):
     assert "+    return a + b" in res["patch"]
 
 
+TEST_PATCH_BASE_NEW = (
+    "diff --git a/mimo_test_command.sh b/mimo_test_command.sh\n"
+    "new file mode 100755\n--- /dev/null\n+++ b/mimo_test_command.sh\n@@ -0,0 +1,9 @@\n"
+    "+#!/bin/bash\n"
+    "+case \"${1:-}\" in\n"
+    "+  base) python -c \"from pkg.mod import add; assert callable(add)\" ;;\n"
+    "+  new) python -c \"from pkg.mod import add; assert add(2, 3) == 5\" ;;\n"
+    "+  *) echo \"usage: $0 base|new\"; exit 2 ;;\n"
+    "+esac\n"
+    "+\n"
+    "+\n"
+    "+\n")
+
+
+def test_base_and_new_test_command_is_run_as_the_task_defines_it(docker):
+    """У 19% задач test_command = `... base && ... new`; без аргумента скрипт выходит с кодом 2."""
+    task = dict(make_task(test_patch=TEST_PATCH_BASE_NEW),
+                test_command="bash /testbed/mimo_test_command.sh base && "
+                             "bash /testbed/mimo_test_command.sh new")
+    for edits, expect in (([("edit_file", FIX)], True), ([], False)):
+        mgr = SessionManager({"t-1": task}, runner=docker, max_sessions=1)
+        info = mgr.start("t-1", {"tool_calls": 30})
+        for name, args in edits:
+            mgr.tool(info["session_id"], name, args)
+        res = mgr.finish(info["session_id"])
+        if expect:
+            assert res["passed"] is True and res["reason"] == "tests_passed", res
+        else:   # патча нет -> no_patch; тестируем отдельно неверный патч ниже
+            assert res["passed"] is False
+    mgr = SessionManager({"t-1": task}, runner=docker, max_sessions=1)
+    info = mgr.start("t-1", {"tool_calls": 30})
+    mgr.tool(info["session_id"], "write_file", {"filepath": "README.md", "content": "x\n"})
+    res = mgr.finish(info["session_id"])
+    assert res["reason"] == "tests_failed" and not any("usage" in l for l in res["tail"])
+
+
 def test_no_change_and_wrong_change_fail(docker):
     res = finish_with(docker, [])
     assert res["passed"] is False and res["reason"] == "no_patch"

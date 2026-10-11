@@ -258,11 +258,17 @@ def main():
     ap.add_argument("--sandbox-url", default=os.environ.get("SWE_SANDBOX_URL"))
     ap.add_argument("--token", default=os.environ.get("SWE_SANDBOX_TOKEN"))
     ap.add_argument("--out", default="results/mimo_baseline")
+    ap.add_argument("--clean-start", action="store_true",
+                    help="перед запуском закрыть все сессии на сервере (брошенные прошлым прогоном); "
+                         "нельзя, если на этот сервер одновременно работает другой прогон")
     ap.add_argument("--system-file", default=None,
                     help="системный промпт агента, например submission_v1_noadapter/prompts/system.md")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
+    if args.clean_start:
+        closed = MimoRemoteEnv(args.sandbox_url, args.token, task_ids=[])._http("POST", "/abort_all", {})
+        print("закрыто брошенных сессий на сервере:", closed.get("result"), flush=True)
     ids = args.ids or [t["instance_id"] for t in MimoRemoteEnv(args.sandbox_url, args.token).tasks][:args.first]
     path = os.path.join(args.out, "results.jsonl")
     todo = [i for i in ids if i not in done_ids(path)]

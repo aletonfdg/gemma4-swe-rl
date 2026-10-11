@@ -126,6 +126,8 @@ class App:
                 return self._await(self._submit(lambda: self.mgr.finish(sid)))
             if path == "/abort":
                 return 200, {"ok": True, "result": self.mgr.abort(str(body["session_id"]))}
+            if path == "/abort_all":
+                return 200, {"ok": True, "result": self.mgr.abort_all()}
             if path == "/poll":
                 return self._await(str(body["job"]))
         except (KeyError, ValueError, TypeError) as e:
@@ -202,6 +204,12 @@ def main():
     tasks = load_tasks(args.data, args.limit)
     manager = SessionManager(tasks, max_sessions=args.max_sessions, ttl_seconds=args.ttl,
                              mem=args.mem, cpus=args.cpus)
+    try:
+        stale = manager.remove_stale_containers()
+        if stale:
+            print(f"Удалено брошенных контейнеров от прошлого запуска: {stale}")
+    except Exception as e:   # Docker недоступен -- сервер всё равно запустится, ошибка вылезет на /start
+        print(f"Не удалось проверить старые контейнеры: {e}", file=sys.stderr)
     server = serve(App(manager, tasks, token), args.host, args.port)
     print(f"Задач (python, pytest): {len(tasks)}; слотов: {args.max_sessions}")
     print(f"Слушаю http://{args.host}:{args.port}")

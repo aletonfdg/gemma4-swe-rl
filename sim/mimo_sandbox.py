@@ -413,6 +413,20 @@ class SessionManager:
     def abort(self, sid):
         return self._release(sid) is not None
 
+    def abort_all(self):
+        """Закрыть все сессии и освободить слоты (например, клиент упал и бросил эпизоды)."""
+        with self._lock:
+            sids = list(self._sessions)
+        return sum(self._release(sid) is not None for sid in sids)
+
+    def remove_stale_containers(self):
+        """Удалить контейнеры песочницы, оставшиеся от прошлого запуска сервера (метка swegemma_mimo)."""
+        rc, out, _ = self.runner.run(["ps", "-aq", "--filter", "label=swegemma_mimo=1"], timeout=60)
+        ids = out.decode("utf-8", "replace").split() if rc == 0 else []
+        if ids:
+            self.runner.run(["rm", "-f", *ids], timeout=120)
+        return len(ids)
+
     def reap(self):
         now = time.time()
         with self._lock:

@@ -191,6 +191,32 @@ def test_slots_busy_then_freed_on_abort(docker):
     mgr.abort(mgr.start("t-1")["session_id"])
 
 
+def test_abort_all_frees_every_slot_and_container(docker):
+    mgr = SessionManager({"t-1": make_task()}, runner=docker, max_sessions=2)
+    mgr.start("t-1")
+    mgr.start("t-1")
+    with pytest.raises(Busy):
+        mgr.start("t-1")
+    assert mgr.abort_all() == 2 and mgr.active() == 0 and docker.containers == {}
+    assert mgr.abort_all() == 0
+    mgr.abort(mgr.start("t-1")["session_id"])      # слоты снова свободны
+
+
+def test_remove_stale_containers_removes_only_labelled_ones():
+    class Docker:
+        calls = []
+
+        def run(self, args, input=None, timeout=None):
+            self.calls.append(args)
+            return (0, b"aaa\nbbb\n", b"") if args[0] == "ps" else (0, b"", b"")
+
+    d = Docker()
+    mgr = SessionManager({}, runner=d)
+    assert mgr.remove_stale_containers() == 2
+    assert d.calls[0] == ["ps", "-aq", "--filter", "label=swegemma_mimo=1"]
+    assert d.calls[1] == ["rm", "-f", "aaa", "bbb"]
+
+
 def test_reaper_closes_expired_sessions(docker):
     mgr = SessionManager({"t-1": make_task()}, runner=docker, max_sessions=1, ttl_seconds=-1)
     mgr.start("t-1")
@@ -290,6 +316,17 @@ def test_baseline_client_prepends_system_prompt_only_when_given(monkeypatch):
     assert seen[0] == user
     assert seen[1] == [{"role": "system", "content": "RULES"}] + user
     assert user == [{"role": "user", "content": "task"}]      # исходный список не изменён
+
+
+def test_clean_start_closes_abandoned_sessions_over_http(server):
+    url, docker = server
+    env = MimoRemoteEnv(url, "secret", poll_sleep=0.05)
+    env.reset(0)                                    # «брошенный» эпизод: его никто не закроет
+    assert json.load(urllib.request.urlopen(url + "/health"))["active"] == 1
+    other = MimoRemoteEnv(url, "secret", task_ids=[])
+    assert other._http("POST", "/abort_all", {})["result"] == 1
+    assert json.load(urllib.request.urlopen(url + "/health"))["active"] == 0
+    assert docker.containers == {}
 
 
 def test_remote_env_marks_crash_when_server_is_gone(server):

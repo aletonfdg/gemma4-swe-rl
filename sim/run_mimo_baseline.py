@@ -45,11 +45,22 @@ def wilson(k, n, z=1.96):
     return max(0.0, c - h), min(1.0, c + h)
 
 
-def done_ids(path):
+def load_rows(path):
+    """Последняя строка по каждой задаче: повторный запуск дописывает новую вместо упавшей."""
     if not os.path.exists(path):
-        return set()
+        return []
     with open(path, encoding="utf-8") as f:
-        return {json.loads(line)["instance_id"] for line in f if line.strip()}
+        last = {}
+        for line in f:
+            if line.strip():
+                row = json.loads(line)
+                last[row["instance_id"]] = row
+    return list(last.values())
+
+
+def done_ids(path):
+    """Готовы только задачи без сбоя инфраструктуры: упавшие (туннель, песочница) перезапускаются."""
+    return {r["instance_id"] for r in load_rows(path) if not r.get("error") and not r.get("crashed")}
 
 
 def run_one(task_id, args, client):
@@ -82,8 +93,7 @@ def run_one(task_id, args, client):
 
 
 def summarize(path):
-    with open(path, encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f if line.strip()]
+    rows = load_rows(path)
     ok = [r for r in rows if not r.get("crashed") and not r.get("error")]   # сбои инфраструктуры не в счёт
     k = sum(r["passed"] for r in ok)
     lo, hi = wilson(k, len(ok))

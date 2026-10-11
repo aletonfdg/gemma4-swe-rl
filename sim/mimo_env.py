@@ -51,7 +51,7 @@ class MimoRemoteEnv:
 
     def __init__(self, base_url=None, token=None, use_tight_budget=True,
                  eval_config_path="eval_config.yaml", task_ids=None, request_timeout=75.0,
-                 retries=5, start_wait_seconds=1800.0, poll_sleep=5.0):
+                 retries=12, start_wait_seconds=1800.0, poll_sleep=5.0):
         self.base_url = (base_url or os.environ["SWE_SANDBOX_URL"]).rstrip("/")
         self.token = token or os.environ["SWE_SANDBOX_TOKEN"]
         self.use_tight_budget = use_tight_budget

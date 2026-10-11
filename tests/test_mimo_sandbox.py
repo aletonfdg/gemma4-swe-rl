@@ -347,6 +347,50 @@ def test_thinking_flag_reaches_the_chat_template_kwargs():
     assert sent == [True, True, False]                      # по умолчанию размышления включены
 
 
+def test_analyzer_subcall_keeps_tool_calls_in_its_history():
+    """Раньше сообщение ассистента писалось без tool_calls, и модель не видела своих вызовов."""
+    from types import SimpleNamespace
+    from rl.rollout import _run_analyzer_subcall
+    seen = []
+
+    class LLM:
+        n = 0
+
+        def chat(self, messages, tools, temperature=0.0, lora_name=None):
+            seen.append([dict(m) for m in messages])
+            LLM.n += 1
+            if LLM.n == 1:
+                return dict(content="", token_logprobs=[("t", -0.1)], finish_reason="tool_calls",
+                            tool_calls=[{"id": "call1", "name": "read_file",
+                                         "arguments": json.dumps({"filepath": "a.py"})},
+                                        {"id": "call2", "name": "read_file", "arguments": "{bad json"}])
+            return dict(content="REPORT", tool_calls=[], token_logprobs=[], finish_reason="stop")
+
+    env = SimpleNamespace(task={"instance_id": "t"}, ctx=SimpleNamespace(budget_exhausted=lambda: False),
+                          call_tool=lambda name, args: json.dumps({"status": "ok"}))
+    report, _ = _run_analyzer_subcall(env, LLM(), "find it", None, temperature=0.0)
+    assert report == "REPORT"
+    second = seen[1]                       # история, с которой модель вызвана повторно
+    asst = [m for m in second if m["role"] == "assistant"][0]
+    assert [tc["id"] for tc in asst["tool_calls"]] == ["call1", "call2"]
+    tool_ids = [m["tool_call_id"] for m in second if m["role"] == "tool"]
+    assert tool_ids == ["call1", "call2"]  # на каждый вызов есть ответ, в том числе на битый JSON
+
+
+def test_hidden_tools_are_not_offered_to_the_model(monkeypatch):
+    from llm.llm_client import LLMClient
+    from sim.run_mimo_baseline import BaselineClient, GRAPH_TOOLS
+    seen = []
+    monkeypatch.setattr(LLMClient, "chat", lambda self, messages, tools, **kw: seen.append(
+        [t["function"]["name"] for t in tools]) or {})
+    tools = [{"type": "function", "function": {"name": n}}
+             for n in ("run_command", "read_file", *GRAPH_TOOLS)]
+    BaselineClient(base_url="http://x").chat([], tools)
+    BaselineClient(base_url="http://x", hide_tools=GRAPH_TOOLS).chat([], tools)
+    assert seen[0] == ["run_command", "read_file", *GRAPH_TOOLS]
+    assert seen[1] == ["run_command", "read_file"]
+
+
 def test_remote_env_marks_crash_when_server_is_gone(server):
     url, _ = server
     env = MimoRemoteEnv(url, "secret", poll_sleep=0.05, retries=1)

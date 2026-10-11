@@ -25,6 +25,7 @@ from sim.mimo_env import MimoRemoteEnv
 _LOCK = threading.Lock()
 MAX_MODEL_LEN = 32768
 MIN_OUTPUT_TOKENS = 512
+GRAPH_TOOLS = ("code_analyzer_agent", "get_code_neighbors", "search_similar_code", "get_code_subgraph")
 
 
 class ContextFull(RuntimeError):
@@ -108,14 +109,17 @@ class BaselineClient(LLMClient):
     """Тот же клиент, но с лимитом вывода ближе к боевому sampling.yaml (там 16384 токенов;
     с растущим контекстом 32768 столько не помещается вместе с промптом, берём 8192)."""
 
-    def __init__(self, *a, max_tokens=8192, system=None, thinking=True, **kw):
+    def __init__(self, *a, max_tokens=8192, system=None, thinking=True, hide_tools=(), **kw):
         super().__init__(*a, **kw)
+        self._hide_tools = set(hide_tools)    # инструменты, которых в этой среде нет (граф, аналитик)
         self._max_tokens = max_tokens
         self._thinking = thinking     # False = enable_thinking=false (в правилах thinking_budget: 0)
         self._system = system     # как `instruction` в agent.yaml боевой отправки (prompts/system.md)
 
     def chat(self, messages, tools, temperature=0.2, max_tokens=None, lora_name=None):
         limit = max_tokens or self._max_tokens
+        if self._hide_tools:
+            tools = [t for t in tools if t["function"]["name"] not in self._hide_tools]
         if self._system:
             messages = [{"role": "system", "content": self._system}] + list(messages)
         for _ in range(2):
@@ -259,6 +263,9 @@ def main():
     ap.add_argument("--sandbox-url", default=os.environ.get("SWE_SANDBOX_URL"))
     ap.add_argument("--token", default=os.environ.get("SWE_SANDBOX_TOKEN"))
     ap.add_argument("--out", default="results/mimo_baseline")
+    ap.add_argument("--no-analyzer", action="store_true",
+                    help="скрыть code_analyzer_agent и графовые инструменты (в MiMo графов нет: "
+                         "аналитик впустую съедает общий бюджет вызовов)")
     ap.add_argument("--thinking", choices=("on", "off"), default="on",
                     help="off = без размышлений модели (enable_thinking=false): ходы короче, их больше за бюджет")
     ap.add_argument("--clean-start", action="store_true",
@@ -280,8 +287,10 @@ def main():
     system = open(args.system_file, encoding="utf-8").read() if args.system_file else None
     print("системный промпт:", args.system_file or "нет (голая модель)", flush=True)
     print("размышления модели:", args.thinking, flush=True)
+    hidden = GRAPH_TOOLS if args.no_analyzer else ()
+    print("скрытые инструменты:", sorted(hidden) or "нет", flush=True)
     client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
-                            system=system, thinking=(args.thinking == "on"))
+                            system=system, thinking=(args.thinking == "on"), hide_tools=hidden)
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         list(ex.map(lambda i: run_one(i, args, client), todo))
     if os.path.exists(path):

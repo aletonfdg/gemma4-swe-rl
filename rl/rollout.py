@@ -33,13 +33,23 @@ def _run_analyzer_subcall(env, llm_client, request_text, analyzer_lora_name,
             break
         out = llm_client.chat(sub_messages, ANALYZER_TOOL_SCHEMAS, temperature=temperature,
                                lora_name=analyzer_lora_name)
-        sub_messages.append({"role": "assistant", "content": out["content"]})
+        # без tool_calls в сообщении ассистента следующие сообщения role=tool висят в воздухе, модель не
+        # видит своих вызовов и ходит по кругу (12 из 12 отчётов аналитика в MiMo были пустыми)
+        asst = {"role": "assistant", "content": out["content"]}
+        if out["tool_calls"]:
+            asst["tool_calls"] = [
+                {"id": tc["id"], "type": "function",
+                 "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                for tc in out["tool_calls"]]
+        sub_messages.append(asst)
         if not out["tool_calls"]:
             return out["content"], sub_steps
         for tc in out["tool_calls"]:
             try:
                 args = json.loads(tc["arguments"])
             except Exception:
+                sub_messages.append({"role": "tool", "tool_call_id": tc["id"],
+                                     "content": "Invalid JSON arguments."})
                 continue
             obs = env.call_tool(tc["name"], args)
             sub_messages.append({"role": "tool", "tool_call_id": tc["id"], "content": obs})

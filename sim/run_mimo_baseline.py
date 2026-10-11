@@ -11,15 +11,24 @@ import argparse
 import json
 import math
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+from openai import BadRequestError
 
 from llm.llm_client import LLMClient
 from rl.rollout import run_episode
 from sim.mimo_env import MimoRemoteEnv
 
 _LOCK = threading.Lock()
+MAX_MODEL_LEN = 32768
+MIN_OUTPUT_TOKENS = 512
+
+
+class ContextFull(RuntimeError):
+    """Промпт занял почти весь контекст: модель уже не может ответить. Это провал агента, а не сбой."""
 
 
 class BaselineClient(LLMClient):
@@ -31,8 +40,20 @@ class BaselineClient(LLMClient):
         self._max_tokens = max_tokens
 
     def chat(self, messages, tools, temperature=0.2, max_tokens=None, lora_name=None):
-        return super().chat(messages, tools, temperature=temperature,
-                            max_tokens=max_tokens or self._max_tokens, lora_name=lora_name)
+        limit = max_tokens or self._max_tokens
+        for _ in range(2):
+            try:
+                return super().chat(messages, tools, temperature=temperature,
+                                    max_tokens=limit, lora_name=lora_name)
+            except BadRequestError as e:
+                m = re.search(r"at least (\d+) input tokens", str(e))
+                if not m:
+                    raise
+                room = MAX_MODEL_LEN - int(m.group(1)) - 64   # промпт вырос: ужимаем только вывод
+                if room < MIN_OUTPUT_TOKENS:
+                    raise ContextFull(str(e)) from e
+                limit = min(limit, room)
+        raise ContextFull("не удалось уместить запрос в контекст")
 
 
 def wilson(k, n, z=1.96):
@@ -78,6 +99,10 @@ def run_one(task_id, args, client):
         with open(os.path.join(args.out, "messages", f"{task_id}.json"), "w", encoding="utf-8") as f:
             json.dump({"messages": messages, "patch": (env.last_result or {}).get("patch", "")},
                       f, ensure_ascii=False)
+    except ContextFull:      # контекст переполнен: патч не сдан, это провал агента (не сбой)
+        row.update(result={"reason": "context_full", "passed": False}, steps=0,
+                   turns=env.ctx.turns_used, tool_calls=env.ctx.tool_calls_used, crashed=False)
+        env.cleanup()
     except Exception as e:   # один упавший эпизод не должен ронять весь прогон
         row["error"] = f"{type(e).__name__}: {e}"
         try:

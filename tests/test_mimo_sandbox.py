@@ -248,6 +248,37 @@ def test_remote_env_full_episode_through_run_episode(server):
     assert steps and docker.containers == {}
 
 
+def test_baseline_runner_records_where_the_time_goes(server, tmp_path):
+    import argparse
+    from sim import run_mimo_baseline as rb
+    url, docker = server
+
+    class TimedLLM:
+        def __init__(self):
+            self.script = [("edit_file", FIX), ("submit_patch", {})]
+
+        def chat(self, messages, schemas, temperature=0.0, lora_name=None):
+            name, args = self.script.pop(0)
+            return dict(content="", token_logprobs=[], finish_reason="tool_calls",
+                        usage={"prompt_tokens": 100, "completion_tokens": 40},
+                        tool_calls=[{"id": f"c{len(self.script)}", "name": name,
+                                     "arguments": json.dumps(args)}])
+
+    args = argparse.Namespace(sandbox_url=url, token="secret", out=str(tmp_path),
+                              temperature=0.0, poll_sleep=0.05)
+    rb.run_one("t-1", args, TimedLLM())
+    row = rb.load_rows(str(tmp_path / "results.jsonl"))[0]
+    tm = row["timing"]
+    assert row["passed"] is True and tm["turns"] == 2 and tm["ctok"] == 80 and tm["max_ptok"] == 100
+    kinds = [e["k"] for e in tm["events"]]
+    assert kinds.count("llm") == 2 and kinds.count("tool") == 2     # edit_file, submit_patch
+    assert "reset" in kinds and "finalize" in kinds and "verify" in kinds
+    assert tm["events"][0]["k"] == "reset" and all(e["s"] >= 0 for e in tm["events"])
+    assert [e["name"] for e in tm["events"] if e["k"] == "tool"] == ["edit_file", "submit_patch"]
+    assert all(e["par"] == 1 for e in tm["events"] if e["k"] == "llm")   # один эпизод шёл
+    rb.print_timing([row])                                          # не падает на реальных данных
+
+
 def test_remote_env_marks_crash_when_server_is_gone(server):
     url, _ = server
     env = MimoRemoteEnv(url, "secret", poll_sleep=0.05, retries=1)

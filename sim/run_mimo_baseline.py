@@ -31,6 +31,79 @@ class ContextFull(RuntimeError):
     """Промпт занял почти весь контекст: модель уже не может ответить. Это провал агента, а не сбой."""
 
 
+_ACTIVE = [0]   # сколько эпизодов идёт прямо сейчас: от этого зависит скорость модели
+
+
+class EpisodeTrace:
+    """Хронология эпизода: куда уходит бюджет времени (модель, инструменты, остальное)."""
+
+    def __init__(self):
+        self.t0 = time.time()
+        self.events = []
+
+    def add(self, kind, start, dur, **kw):
+        self.events.append({"k": kind, "at": round(start - self.t0, 2), "s": round(dur, 2), **kw})
+
+    def summary(self):
+        ev = self.events
+        llm = [e for e in ev if e["k"] == "llm"]
+
+        def tot(*kinds):
+            return round(sum(e["s"] for e in ev if e["k"] in kinds), 1)
+        return {"reset_s": tot("reset"), "llm_s": tot("llm"), "tool_s": tot("tool"),
+                "finish_s": tot("finalize", "verify"), "turns": len(llm),
+                "ctok": sum(e.get("ctok") or 0 for e in llm),
+                "max_ptok": max([e.get("ptok") or 0 for e in llm], default=0), "events": ev}
+
+
+class TracedClient:
+    """Клиент модели одного эпизода: меряет задержку и токены каждого хода."""
+
+    def __init__(self, base, trace):
+        self.base, self.trace = base, trace
+
+    def chat(self, *a, **kw):
+        t, out = time.time(), None
+        try:
+            out = self.base.chat(*a, **kw)
+            return out
+        finally:
+            u = (out or {}).get("usage") or {}
+            self.trace.add("llm", t, time.time() - t, ptok=u.get("prompt_tokens"),
+                           ctok=u.get("completion_tokens"), par=_ACTIVE[0])
+
+
+class TimedEnv(MimoRemoteEnv):
+    """Окружение MiMo, которое пишет время сброса, каждого инструмента и проверки в трассу."""
+
+    def __init__(self, *a, trace, **kw):
+        super().__init__(*a, **kw)
+        self.trace = trace
+
+    def _timed(self, kind, fn, *a, **kw):
+        t = time.time()
+        try:
+            return fn(*a, **kw)
+        finally:
+            self.trace.add(kind, t, time.time() - t)
+
+    def reset(self, *a, **kw):
+        return self._timed("reset", super().reset, *a, **kw)
+
+    def call_tool(self, tool_name, tool_args):
+        t = time.time()
+        try:
+            return super().call_tool(tool_name, tool_args)
+        finally:
+            self.trace.add("tool", t, time.time() - t, name=tool_name)
+
+    def finalize(self):
+        return self._timed("finalize", super().finalize)
+
+    def verify(self, *a, **kw):
+        return self._timed("verify", super().verify, *a, **kw)
+
+
 class BaselineClient(LLMClient):
     """Тот же клиент, но с лимитом вывода ближе к боевому sampling.yaml (там 16384 токенов;
     с растущим контекстом 32768 столько не помещается вместе с промптом, берём 8192)."""
@@ -86,8 +159,13 @@ def done_ids(path):
 
 def run_one(task_id, args, client):
     t0 = time.time()
-    env = MimoRemoteEnv(args.sandbox_url, args.token, task_ids=[task_id])
+    trace = EpisodeTrace()
+    env = TimedEnv(args.sandbox_url, args.token, task_ids=[task_id], trace=trace,
+                   poll_sleep=getattr(args, "poll_sleep", 5.0))
+    client = TracedClient(client, trace)
     row = {"instance_id": task_id, "passed": False, "error": None}
+    with _LOCK:
+        _ACTIVE[0] += 1
     try:
         steps, messages, passed = run_episode(env, 0, client, None, None, temperature=args.temperature)
         row.update(passed=bool(passed), steps=len(steps), turns=env.ctx.turns_used,
@@ -110,11 +188,16 @@ def run_one(task_id, args, client):
         except Exception:
             pass
     row["seconds"] = round(time.time() - t0)
+    row["timing"] = trace.summary()
     with _LOCK:
+        _ACTIVE[0] -= 1
         with open(os.path.join(args.out, "results.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    tm = row["timing"]
     print(f"{task_id}: passed={row['passed']} reason={row.get('result', {}).get('reason')} "
-          f"calls={row.get('tool_calls')} {row['seconds']}s err={row['error']}", flush=True)
+          f"calls={row.get('tool_calls')} {row['seconds']}s [модель {tm['llm_s']}s/{tm['turns']} ходов/"
+          f"{tm['ctok']} ток, инструменты {tm['tool_s']}s, старт {tm['reset_s']}s, "
+          f"проверка {tm['finish_s']}s] err={row['error']}", flush=True)
 
 
 def summarize(path):
@@ -129,6 +212,35 @@ def summarize(path):
         key = r.get("result", {}).get("reason")
         reasons[key] = reasons.get(key, 0) + 1
     print("причины:", reasons)
+    print_timing(ok)
+
+
+def print_timing(rows):
+    """Куда уходит бюджет времени агента: доля модели и инструментов, скорость генерации."""
+    tm = [r["timing"] for r in rows if r.get("timing") and r["timing"]["turns"]]
+    if not tm:
+        return
+    agent = [t["llm_s"] + t["tool_s"] for t in tm]
+    llm, tool = sum(t["llm_s"] for t in tm), sum(t["tool_s"] for t in tm)
+    turns = sum(t["turns"] for t in tm)
+    ctok = sum(t["ctok"] for t in tm)
+    print(f"\nвремя агента (модель + инструменты), среднее на эпизод: {sum(agent) / len(tm):.0f} с")
+    print(f"  модель {llm / (llm + tool):.0%}, инструменты {tool / (llm + tool):.0%}")
+    print(f"  ход модели: {llm / turns:.1f} с в среднем, {ctok / turns:.0f} токенов вывода на ход, "
+          f"{ctok / max(llm, 1e-9):.1f} ток/с")
+    tools = [e["s"] for r in rows for e in (r.get("timing") or {}).get("events", []) if e["k"] == "tool"]
+    if tools:
+        tools.sort()
+        print(f"  вызов инструмента: медиана {tools[len(tools) // 2]:.1f} с, "
+              f"максимум {tools[-1]:.1f} с, всего вызовов {len(tools)}")
+    by_par = {}
+    for r in rows:
+        for e in (r.get("timing") or {}).get("events", []):
+            if e["k"] == "llm" and e.get("ctok") and e["s"] > 0:
+                by_par.setdefault(e.get("par"), []).append(e["ctok"] / e["s"])
+    for par in sorted(by_par, key=lambda x: (x is None, x)):
+        v = sorted(by_par[par])
+        print(f"  скорость при {par} параллельных эпизодах: медиана {v[len(v) // 2]:.1f} ток/с ({len(v)} ходов)")
 
 
 def main():

@@ -25,7 +25,10 @@ class LLMClient:
         token_logprobs = []
         if choice.logprobs and choice.logprobs.content:
             token_logprobs = [(tl.token, tl.logprob) for tl in choice.logprobs.content]
+        usage = getattr(resp, "usage", None)
         return {
+            "usage": {"prompt_tokens": getattr(usage, "prompt_tokens", None),
+                      "completion_tokens": getattr(usage, "completion_tokens", None)},
             "content": msg.content or "",
             "tool_calls": [{"name": tc.function.name, "arguments": tc.function.arguments,
                              "id": tc.id} for tc in tool_calls],

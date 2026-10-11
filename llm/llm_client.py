@@ -8,7 +8,8 @@ class LLMClient:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
 
-    def chat(self, messages, tools, temperature=0.9, max_tokens=4096, lora_name: str | None = None):
+    def chat(self, messages, tools, temperature=0.9, max_tokens=4096, lora_name: str | None = None,
+             thinking: bool = True):
         resp = self.client.chat.completions.create(
             model=lora_name or self.model,
             messages=messages,
@@ -17,7 +18,7 @@ class LLMClient:
             temperature=temperature,
             max_tokens=max_tokens,
             logprobs=True,
-            extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+            extra_body={"chat_template_kwargs": {"enable_thinking": bool(thinking)}},
         )
         choice = resp.choices[0]
         msg = choice.message

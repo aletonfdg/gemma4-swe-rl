@@ -329,6 +329,24 @@ def test_clean_start_closes_abandoned_sessions_over_http(server):
     assert docker.containers == {}
 
 
+def test_thinking_flag_reaches_the_chat_template_kwargs():
+    from types import SimpleNamespace
+    from llm.llm_client import LLMClient
+    from sim.run_mimo_baseline import BaselineClient
+    sent = []
+
+    def create(**kw):
+        sent.append(kw["extra_body"]["chat_template_kwargs"]["enable_thinking"])
+        msg = SimpleNamespace(content="ok", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop", logprobs=None)],
+                               usage=SimpleNamespace(prompt_tokens=5, completion_tokens=3))
+
+    for client in (LLMClient(), BaselineClient(thinking=True), BaselineClient(thinking=False)):
+        client.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        client.chat([{"role": "user", "content": "x"}], [])
+    assert sent == [True, True, False]                      # по умолчанию размышления включены
+
+
 def test_remote_env_marks_crash_when_server_is_gone(server):
     url, _ = server
     env = MimoRemoteEnv(url, "secret", poll_sleep=0.05, retries=1)

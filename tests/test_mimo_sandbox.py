@@ -279,6 +279,19 @@ def test_baseline_runner_records_where_the_time_goes(server, tmp_path):
     rb.print_timing([row])                                          # не падает на реальных данных
 
 
+def test_baseline_client_prepends_system_prompt_only_when_given(monkeypatch):
+    from llm.llm_client import LLMClient
+    from sim.run_mimo_baseline import BaselineClient
+    seen = []
+    monkeypatch.setattr(LLMClient, "chat", lambda self, messages, tools, **kw: seen.append(messages) or {})
+    user = [{"role": "user", "content": "task"}]
+    BaselineClient(base_url="http://x").chat(user, [])
+    BaselineClient(base_url="http://x", system="RULES").chat(user, [])
+    assert seen[0] == user
+    assert seen[1] == [{"role": "system", "content": "RULES"}] + user
+    assert user == [{"role": "user", "content": "task"}]      # исходный список не изменён
+
+
 def test_remote_env_marks_crash_when_server_is_gone(server):
     url, _ = server
     env = MimoRemoteEnv(url, "secret", poll_sleep=0.05, retries=1)

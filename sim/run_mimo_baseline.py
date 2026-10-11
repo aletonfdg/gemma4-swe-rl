@@ -108,12 +108,15 @@ class BaselineClient(LLMClient):
     """Тот же клиент, но с лимитом вывода ближе к боевому sampling.yaml (там 16384 токенов;
     с растущим контекстом 32768 столько не помещается вместе с промптом, берём 8192)."""
 
-    def __init__(self, *a, max_tokens=8192, **kw):
+    def __init__(self, *a, max_tokens=8192, system=None, **kw):
         super().__init__(*a, **kw)
         self._max_tokens = max_tokens
+        self._system = system     # как `instruction` в agent.yaml боевой отправки (prompts/system.md)
 
     def chat(self, messages, tools, temperature=0.2, max_tokens=None, lora_name=None):
         limit = max_tokens or self._max_tokens
+        if self._system:
+            messages = [{"role": "system", "content": self._system}] + list(messages)
         for _ in range(2):
             try:
                 return super().chat(messages, tools, temperature=temperature,
@@ -255,6 +258,8 @@ def main():
     ap.add_argument("--sandbox-url", default=os.environ.get("SWE_SANDBOX_URL"))
     ap.add_argument("--token", default=os.environ.get("SWE_SANDBOX_TOKEN"))
     ap.add_argument("--out", default="results/mimo_baseline")
+    ap.add_argument("--system-file", default=None,
+                    help="системный промпт агента, например submission_v1_noadapter/prompts/system.md")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -263,7 +268,10 @@ def main():
     todo = [i for i in ids if i not in done_ids(path)]
     print(f"задач: {len(ids)}, осталось: {len(todo)}, потоков: {args.workers}", flush=True)
 
-    client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens)
+    system = open(args.system_file, encoding="utf-8").read() if args.system_file else None
+    print("системный промпт:", args.system_file or "нет (голая модель)", flush=True)
+    client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
+                            system=system)
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         list(ex.map(lambda i: run_one(i, args, client), todo))
     if os.path.exists(path):

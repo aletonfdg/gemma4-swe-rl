@@ -20,6 +20,7 @@ from openai import BadRequestError
 
 from llm.llm_client import LLMClient
 from rl.rollout import run_episode
+from sim.compaction import CompactingClient
 from sim.mimo_env import MimoRemoteEnv
 
 _LOCK = threading.Lock()
@@ -52,6 +53,7 @@ class EpisodeTrace:
         def tot(*kinds):
             return round(sum(e["s"] for e in ev if e["k"] in kinds), 1)
         return {"reset_s": tot("reset"), "llm_s": tot("llm"), "tool_s": tot("tool"),
+                "compact_s": tot("compact"), "compactions": sum(e["k"] == "compact" for e in ev),
                 "finish_s": tot("finalize", "verify"), "turns": len(llm),
                 "ctok": sum(e.get("ctok") or 0 for e in llm),
                 "max_ptok": max([e.get("ptok") or 0 for e in llm], default=0), "events": ev}
@@ -63,14 +65,14 @@ class TracedClient:
     def __init__(self, base, trace):
         self.base, self.trace = base, trace
 
-    def chat(self, *a, **kw):
+    def chat(self, *a, kind="llm", **kw):      # kind="compact" -- запрос сводки при сжатии контекста
         t, out = time.time(), None
         try:
             out = self.base.chat(*a, **kw)
             return out
         finally:
             u = (out or {}).get("usage") or {}
-            self.trace.add("llm", t, time.time() - t, ptok=u.get("prompt_tokens"),
+            self.trace.add(kind, t, time.time() - t, ptok=u.get("prompt_tokens"),
                            ctok=u.get("completion_tokens"), par=_ACTIVE[0])
 
 
@@ -156,22 +158,25 @@ def load_rows(path):
         for line in f:
             if line.strip():
                 row = json.loads(line)
-                last[row["instance_id"]] = row
+                last[(row["instance_id"], row.get("rep", 0))] = row
     return list(last.values())
 
 
 def done_ids(path):
-    """Готовы только задачи без сбоя инфраструктуры: упавшие (туннель, песочница) перезапускаются."""
-    return {r["instance_id"] for r in load_rows(path) if not r.get("error") and not r.get("crashed")}
+    """Готовы пары (задача, повтор) без сбоя инфраструктуры: упавшие (туннель, песочница) перезапускаются."""
+    return {(r["instance_id"], r.get("rep", 0)) for r in load_rows(path)
+            if not r.get("error") and not r.get("crashed")}
 
 
-def run_one(task_id, args, client):
+def run_one(task_id, args, client, rep=0):
     t0 = time.time()
     trace = EpisodeTrace()
     env = TimedEnv(args.sandbox_url, args.token, task_ids=[task_id], trace=trace,
                    poll_sleep=getattr(args, "poll_sleep", 5.0))
     client = TracedClient(client, trace)
-    row = {"instance_id": task_id, "passed": False, "error": None}
+    if getattr(args, "compaction", "off") == "on":   # сжатие контекста, как в боевом харнессе
+        client = CompactingClient(client)
+    row = {"instance_id": task_id, "rep": rep, "passed": False, "error": None}
     with _LOCK:
         _ACTIVE[0] += 1
     try:
@@ -182,7 +187,8 @@ def run_one(task_id, args, client):
                    result={k: v for k, v in (env.last_result or {}).items() if k != "patch"},
                    patch_chars=len((env.last_result or {}).get("patch", "")))
         os.makedirs(os.path.join(args.out, "messages"), exist_ok=True)
-        with open(os.path.join(args.out, "messages", f"{task_id}.json"), "w", encoding="utf-8") as f:
+        name = f"{task_id}.json" if rep == 0 else f"{task_id}__r{rep}.json"
+        with open(os.path.join(args.out, "messages", name), "w", encoding="utf-8") as f:
             json.dump({"messages": messages, "patch": (env.last_result or {}).get("patch", "")},
                       f, ensure_ascii=False)
     except ContextFull:      # контекст переполнен: патч не сдан, это провал агента (не сбой)
@@ -202,10 +208,11 @@ def run_one(task_id, args, client):
         with open(os.path.join(args.out, "results.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     tm = row["timing"]
-    print(f"{task_id}: passed={row['passed']} reason={row.get('result', {}).get('reason')} "
+    comp = f", сжатий {tm['compactions']}/{tm['compact_s']}s" if tm["compactions"] else ""
+    print(f"{task_id}#{rep}: passed={row['passed']} reason={row.get('result', {}).get('reason')} "
           f"calls={row.get('tool_calls')} {row['seconds']}s [модель {tm['llm_s']}s/{tm['turns']} ходов/"
           f"{tm['ctok']} ток, инструменты {tm['tool_s']}s, старт {tm['reset_s']}s, "
-          f"проверка {tm['finish_s']}s] err={row['error']}", flush=True)
+          f"проверка {tm['finish_s']}s{comp}] err={row['error']}", flush=True)
 
 
 def summarize(path):
@@ -220,6 +227,17 @@ def summarize(path):
         key = r.get("result", {}).get("reason")
         reasons[key] = reasons.get(key, 0) + 1
     print("причины:", reasons)
+    by_task = {}
+    for r in ok:
+        by_task.setdefault(r["instance_id"], []).append(bool(r["passed"]))
+    if any(len(v) > 1 for v in by_task.values()):   # были повторы: показываем разброс по задачам
+        solved = sorted(t for t, v in by_task.items() if any(v))
+        mean = sum(sum(v) / len(v) for v in by_task.values()) / len(by_task)
+        print(f"задач решено хотя бы раз: {len(solved)} из {len(by_task)}; "
+              f"средняя доля решения по задачам: {mean:.1%}")
+        print("(интервал выше считается по эпизодам; попытки одной задачи зависимы, честный интервал шире)")
+        for t in solved:
+            print(f"  {t[-6:]}: {sum(by_task[t])}/{len(by_task[t])}")
     print_timing(ok)
 
 
@@ -266,6 +284,10 @@ def main():
     ap.add_argument("--no-analyzer", action="store_true",
                     help="скрыть code_analyzer_agent и графовые инструменты (в MiMo графов нет: "
                          "аналитик впустую съедает общий бюджет вызовов)")
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="сколько раз прогнать каждую задачу (агент недетерминирован: одна попытка = шум)")
+    ap.add_argument("--compaction", choices=("on", "off"), default="on",
+                    help="сжатие контекста как в боевом харнессе (порог 14336 токенов); off = как раньше")
     ap.add_argument("--thinking", choices=("on", "off"), default="on",
                     help="off = без размышлений модели (enable_thinking=false): ходы короче, их больше за бюджет")
     ap.add_argument("--clean-start", action="store_true",
@@ -281,8 +303,11 @@ def main():
         print("закрыто брошенных сессий на сервере:", closed.get("result"), flush=True)
     ids = args.ids or [t["instance_id"] for t in MimoRemoteEnv(args.sandbox_url, args.token).tasks][:args.first]
     path = os.path.join(args.out, "results.jsonl")
-    todo = [i for i in ids if i not in done_ids(path)]
-    print(f"задач: {len(ids)}, осталось: {len(todo)}, потоков: {args.workers}", flush=True)
+    done = done_ids(path)
+    todo = [(i, r) for r in range(args.repeats) for i in ids if (i, r) not in done]   # сначала все задачи, потом повторы
+    print(f"задач: {len(ids)}, повторов: {args.repeats}, эпизодов осталось: {len(todo)}, "
+          f"потоков: {args.workers}", flush=True)
+    print("сжатие контекста:", args.compaction, flush=True)
 
     system = open(args.system_file, encoding="utf-8").read() if args.system_file else None
     print("системный промпт:", args.system_file or "нет (голая модель)", flush=True)
@@ -292,7 +317,7 @@ def main():
     client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
                             system=system, thinking=(args.thinking == "on"), hide_tools=hidden)
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        list(ex.map(lambda i: run_one(i, args, client), todo))
+        list(ex.map(lambda t: run_one(t[0], args, client, t[1]), todo))
     if os.path.exists(path):
         summarize(path)
 

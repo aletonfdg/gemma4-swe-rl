@@ -10,16 +10,17 @@ class LLMClient:
 
     def chat(self, messages, tools, temperature=0.9, max_tokens=4096, lora_name: str | None = None,
              thinking: bool = True):
-        resp = self.client.chat.completions.create(
+        kwargs = dict(
             model=lora_name or self.model,
             messages=messages,
-            tools=tools,
-            tool_choice="auto",
             temperature=temperature,
             max_tokens=max_tokens,
             logprobs=True,
             extra_body={"chat_template_kwargs": {"enable_thinking": bool(thinking)}},
         )
+        if tools:   # пустой список (например, запрос на сводку) -- без tools и tool_choice, иначе сервер отвечает 400
+            kwargs.update(tools=tools, tool_choice="auto")
+        resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
         tool_calls = msg.tool_calls or []

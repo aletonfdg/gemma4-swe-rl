@@ -427,6 +427,37 @@ def test_hidden_tools_are_not_offered_to_the_model(monkeypatch):
     assert seen[1] == ["run_command", "read_file"]
 
 
+def test_repeats_are_separate_episodes_and_resume_per_attempt(server, tmp_path, capsys):
+    import argparse
+    from sim import run_mimo_baseline as rb
+    url, docker = server
+
+    class LLM:
+        def __init__(self):
+            self.script = [("edit_file", FIX), ("submit_patch", {})]
+
+        def chat(self, messages, schemas, temperature=0.0, lora_name=None):
+            name, args = self.script.pop(0)
+            return dict(content="", token_logprobs=[], finish_reason="tool_calls",
+                        usage={"prompt_tokens": 50, "completion_tokens": 10},
+                        tool_calls=[{"id": f"c{len(self.script)}", "name": name,
+                                     "arguments": json.dumps(args)}])
+
+    args = argparse.Namespace(sandbox_url=url, token="secret", out=str(tmp_path), temperature=0.0,
+                              poll_sleep=0.05, compaction="on")      # сжатие включено, но контекст мал
+    path = str(tmp_path / "results.jsonl")
+    rb.run_one("t-1", args, LLM(), rep=0)
+    rb.run_one("t-1", args, LLM(), rep=1)
+    assert rb.done_ids(path) == {("t-1", 0), ("t-1", 1)}
+    assert (tmp_path / "messages" / "t-1.json").exists()
+    assert (tmp_path / "messages" / "t-1__r1.json").exists()
+    rows = rb.load_rows(path)
+    assert sorted(r["rep"] for r in rows) == [0, 1] and all(r["passed"] for r in rows)
+    assert all(r["timing"]["compactions"] == 0 for r in rows)
+    rb.summarize(path)
+    assert "хотя бы раз: 1 из 1" in capsys.readouterr().out
+
+
 def test_remote_env_marks_crash_when_server_is_gone(server):
     url, _ = server
     env = MimoRemoteEnv(url, "secret", poll_sleep=0.05, retries=1)

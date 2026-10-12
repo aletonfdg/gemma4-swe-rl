@@ -104,9 +104,11 @@ def _lossy(b):
 
 
 class MimoSession:
+    workdir = WORKDIR   # у подклассов (задачи конкурса) /workspace
+
     def __init__(self, task, runner, budget=None, mem="4g", cpus=2.0, image_prefix=REGISTRY):
-        if task.get("cwd", WORKDIR) != WORKDIR:
-            raise SandboxError(f"поддерживается только cwd={WORKDIR}, у задачи {task.get('cwd')}")
+        if task.get("cwd", self.workdir) != self.workdir:
+            raise SandboxError(f"поддерживается только cwd={self.workdir}, у задачи {task.get('cwd')}")
         self.task = task
         self.runner = runner
         self.budget = budget or Budget()
@@ -124,23 +126,37 @@ class MimoSession:
 
     # ---------- контейнер ----------
     def exec_bytes(self, argv, input=None, timeout=None):
-        return self.runner.run(["exec", "-i", "-w", WORKDIR, self.name, *argv], input=input,
+        return self.runner.run(["exec", "-i", "-w", self.workdir, self.name, *argv], input=input,
                                timeout=timeout)
 
+    def has_graph(self):
+        return False
+
+    def docker_run_args(self):
+        """Аргументы `docker run` (подклассы добавляют тома)."""
+        return ["run", "-d", "--name", self.name, "--label", "swegemma_mimo=1", "--network", "none",
+                "--memory", self.mem, "--cpus", str(self.cpus), self.image, "sleep", "infinity"]
+
+    def prepare(self):
+        """Репозиторий в контейнере -> baseline-коммит с тегом. У MiMo репозиторий уже лежит в образе."""
+        rc, _, err = self.exec_bytes(["bash", "-c", SETUP_SCRIPT], timeout=600)
+        if rc:
+            raise SandboxError(f"подготовка baseline не удалась: {_lossy(err)[-400:]}")
+
     def start(self):
-        rc, _, err = self.runner.run([
-            "run", "-d", "--name", self.name, "--label", "swegemma_mimo=1", "--network", "none",
-            "--memory", self.mem, "--cpus", str(self.cpus), self.image, "sleep", "infinity"])
+        rc, _, err = self.runner.run(self.docker_run_args())
         if rc:
             raise SandboxError(f"docker run не удался: {_lossy(err)[-400:]}")
         self._container = True
-        rc, _, err = self.exec_bytes(["bash", "-c", SETUP_SCRIPT], timeout=600)
-        if rc:
+        try:
+            self.prepare()
+        except BaseException:
             self.stop()
-            raise SandboxError(f"подготовка baseline не удалась: {_lossy(err)[-400:]}")
+            raise
         self.has_timeout = self.exec_bytes(["bash", "-c", "command -v timeout"])[0] == 0
         # /workspace -> /testbed, чтобы пути из промпта совпадали с боевой песочницей
-        link = self.exec_bytes(["bash", "-c", f"[ -e /workspace ] || ln -s {WORKDIR} /workspace"])
+        link = self.exec_bytes(["bash", "-c",
+                                f"[ -e /workspace ] || ln -s {self.workdir} /workspace"])
         self.workspace_link = link[0] == 0
         self.agent_start = time.time()
 
@@ -177,7 +193,7 @@ class MimoSession:
         if not filepath or "\x00" in filepath:
             raise ValueError("Invalid path")
         p = filepath
-        for prefix in ("/workspace", WORKDIR):
+        for prefix in ("/workspace", self.workdir):
             if p == prefix or p.startswith(prefix + "/"):
                 p = p[len(prefix):]
                 break
@@ -185,7 +201,7 @@ class MimoSession:
         norm = posixpath.normpath(p) if p else "."
         if norm == ".." or norm.startswith("../"):
             raise ValueError("Path traversal forbidden")
-        return WORKDIR if norm == "." else posixpath.join(WORKDIR, norm)
+        return self.workdir if norm == "." else posixpath.join(self.workdir, norm)
 
     def read_bytes(self, path):
         rc, out, _ = self.exec_bytes(["bash", "-c", 'test -f "$1" && cat -- "$1"', "_", path])
@@ -379,8 +395,7 @@ class SessionManager:
             raise Busy("все слоты заняты")
         sid = uuid.uuid4().hex
         try:
-            sess = MimoSession(task, self.runner, Budget.from_dict(budget_dict), self.mem, self.cpus,
-                               self.image_prefix)
+            sess = self._make_session(task, Budget.from_dict(budget_dict))
             sess.start()
         except BaseException:
             self._slots.release()
@@ -389,7 +404,15 @@ class SessionManager:
             self._sessions[sid] = {"session": sess, "created": time.time()}
         return {"session_id": sid, "instance_id": instance_id,
                 "problem_statement": task["problem_statement"], "repo": sess.repo_name(),
-                "layout": sess.layout(), "workspace_link": sess.workspace_link}
+                "layout": sess.layout(), "workspace_link": sess.workspace_link,
+                "has_graph": sess.has_graph()}
+
+    def _make_session(self, task, budget):
+        return MimoSession(task, self.runner, budget, self.mem, self.cpus, self.image_prefix)
+
+    def _verify(self, task, patch):
+        return verify_patch(self.runner, task, patch, self.mem, self.cpus, self.image_prefix,
+                            self.verify_timeout_cap)
 
     def _get(self, sid):
         with self._lock:
@@ -406,8 +429,7 @@ class SessionManager:
         try:
             patch = sess.submitted_patch if sess.patch_submitted else sess.compute_patch()
             sess.stop()   # освободить ресурсы до проверки
-            res = verify_patch(self.runner, sess.task, patch, self.mem, self.cpus,
-                               self.image_prefix, self.verify_timeout_cap)
+            res = self._verify(sess.task, patch)
         finally:
             self._release(sid)
         res["patch"] = patch

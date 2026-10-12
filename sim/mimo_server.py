@@ -189,7 +189,13 @@ def serve(app, host="127.0.0.1", port=8765):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--data", required=True, help="папка load_from_disk с датасетом MiMo")
+    ap.add_argument("--data", default=None, help="папка load_from_disk с датасетом MiMo")
+    ap.add_argument("--comp", default=None,
+                    help="папка с распакованными данными конкурса (tasks.jsonl, snapshots/, graphs/, ...) "
+                         "вместо MiMo; образы swebench-fastapi/rich/requests должны быть собраны")
+    ap.add_argument("--valid", default=None,
+                    help="data/benchmark_valid.json: брать только задачи, где эталонный патч проходит")
+    ap.add_argument("--no-graph", action="store_true", help="--comp: отключить графовые инструменты")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--token", default=None, help="по умолчанию: $SWE_SANDBOX_TOKEN или случайный")
@@ -201,9 +207,26 @@ def main():
     args = ap.parse_args()
 
     token = args.token or os.environ.get("SWE_SANDBOX_TOKEN") or secrets.token_urlsafe(24)
-    tasks = load_tasks(args.data, args.limit)
-    manager = SessionManager(tasks, max_sessions=args.max_sessions, ttl_seconds=args.ttl,
-                             mem=args.mem, cpus=args.cpus)
+    if bool(args.data) == bool(args.comp):
+        ap.error("укажите ровно один из --data (MiMo) и --comp (задачи конкурса)")
+    if args.comp:
+        from sim.comp_sandbox import CompSessionManager, load_comp_tasks
+        tasks = load_comp_tasks(args.comp, args.valid)
+        if args.limit:
+            tasks = dict(list(tasks.items())[:args.limit])
+        if not args.no_graph:
+            try:
+                import networkx, numpy  # noqa: F401
+            except ImportError as e:
+                print(f"ВНИМАНИЕ: графовые инструменты отключены ({e}); установите: pip install networkx numpy",
+                      file=sys.stderr)
+        manager = CompSessionManager(tasks, args.comp, graphs=not args.no_graph,
+                                     max_sessions=args.max_sessions, ttl_seconds=args.ttl,
+                                     mem=args.mem, cpus=args.cpus)
+    else:
+        tasks = load_tasks(args.data, args.limit)
+        manager = SessionManager(tasks, max_sessions=args.max_sessions, ttl_seconds=args.ttl,
+                                 mem=args.mem, cpus=args.cpus)
     try:
         stale = manager.remove_stale_containers()
         if stale:

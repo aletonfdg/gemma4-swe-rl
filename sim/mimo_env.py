@@ -132,7 +132,7 @@ class MimoRemoteEnv:
         self.ctx = _RemoteCtx(self.budget, self.harness)
         self.consecutive_nudges = 0
         return build_agent_prompt(self.task, "/workspace", self.budget, self.harness,
-                                  has_graph=False, enable_sandbox_testing=True,
+                                  has_graph=bool(info.get("has_graph")), enable_sandbox_testing=True,
                                   layout=info["layout"])
 
     def call_tool(self, tool_name, tool_args):

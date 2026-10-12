@@ -172,7 +172,10 @@ def run_one(task_id, args, client, rep=0):
     t0 = time.time()
     trace = EpisodeTrace()
     env = TimedEnv(args.sandbox_url, args.token, task_ids=[task_id], trace=trace,
-                   poll_sleep=getattr(args, "poll_sleep", 5.0))
+                   poll_sleep=getattr(args, "poll_sleep", 5.0),
+                   budget_override={"tool_calls": getattr(args, "tool_calls", None),
+                                    "time_minutes": getattr(args, "time_minutes", None),
+                                    "turns": (args.tool_calls * 2 if getattr(args, "tool_calls", None) else None)})
     client = TracedClient(client, trace)
     if getattr(args, "compaction", "off") == "on":   # сжатие контекста, как в боевом харнессе
         client = CompactingClient(client)
@@ -290,6 +293,10 @@ def main():
                     help="сжатие контекста как в боевом харнессе (порог 14336 токенов); off = как раньше")
     ap.add_argument("--thinking", choices=("on", "off"), default="on",
                     help="off = без размышлений модели (enable_thinking=false): ходы короче, их больше за бюджет")
+    ap.add_argument("--tool-calls", type=int, default=None,
+                    help="лимит вызовов инструментов на задачу (по умолчанию из eval_config.yaml; в боевом харнессе 100)")
+    ap.add_argument("--time-minutes", type=float, default=None,
+                    help="лимит времени агента на задачу в минутах (по умолчанию из eval_config.yaml; в боевом 60)")
     ap.add_argument("--clean-start", action="store_true",
                     help="перед запуском закрыть все сессии на сервере (брошенные прошлым прогоном); "
                          "нельзя, если на этот сервер одновременно работает другой прогон")
@@ -308,6 +315,8 @@ def main():
     print(f"задач: {len(ids)}, повторов: {args.repeats}, эпизодов осталось: {len(todo)}, "
           f"потоков: {args.workers}", flush=True)
     print("сжатие контекста:", args.compaction, flush=True)
+    print("бюджет: вызовов", args.tool_calls or "из eval_config.yaml",
+          "| минут", args.time_minutes or "из eval_config.yaml", flush=True)
 
     system = open(args.system_file, encoding="utf-8").read() if args.system_file else None
     print("системный промпт:", args.system_file or "нет (голая модель)", flush=True)

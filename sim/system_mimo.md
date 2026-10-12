@@ -29,6 +29,13 @@ Aim to understand, resolve, and submit the fix in the minimum number of tool cal
   3. Verify `patch_size > 0` and `files_changed > 0`.
   4. Output a short summary of the fix to end the session.
 
+## Working Efficiently With Tools
+- `read_file` returns at most 150 lines per call. Find the exact place first with `grep -n` (through `run_command`), then read only that range with `start_line` / `end_line`. Never page through whole files.
+- Never read the same file range twice. Your older steps get compacted into a short summary, so write down in your reasoning the key lines and names you need before moving on.
+- Make your first edit by about the 8th tool call. Do not keep reading "just in case"; if you understand the change, edit now and refine afterwards.
+- For `edit_file`, copy `old_string` exactly from the latest `read_file` output of that range (same indentation, no line numbers). If it fails with `old_string not matched`, re-read just those few lines and retry with a smaller, unique `old_string`.
+- After editing, check the change with a short `python -c` snippet or the targeted test before calling `submit_patch`.
+
 ## Scratch Files
 - Write reproduction or experiment scripts ONLY under `/tmp` (e.g. `/tmp/repro.py`). Anything left untracked in `/workspace` ends up in your patch.
 - Never touch `pytest.ini` or `conftest.py` in `/workspace`; they are part of the baseline commit.

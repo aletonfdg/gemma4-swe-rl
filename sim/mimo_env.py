@@ -51,7 +51,8 @@ class MimoRemoteEnv:
 
     def __init__(self, base_url=None, token=None, use_tight_budget=True,
                  eval_config_path="eval_config.yaml", task_ids=None, request_timeout=75.0,
-                 retries=12, start_wait_seconds=1800.0, poll_sleep=5.0):
+                 retries=12, start_wait_seconds=1800.0, poll_sleep=5.0, budget_override=None):
+        self.budget_override = budget_override or {}   # {"tool_calls": N, "time_minutes": M, "turns": K}
         self.base_url = (base_url or os.environ["SWE_SANDBOX_URL"]).rstrip("/")
         self.token = token or os.environ["SWE_SANDBOX_TOKEN"]
         self.use_tight_budget = use_tight_budget
@@ -105,6 +106,9 @@ class MimoRemoteEnv:
         use_tight = self.use_tight_budget if force_tight_budget is None else force_tight_budget
         self.budget, self.harness = (tight_budget_harness(self.eval_config_path) if use_tight
                                      else default_budget_harness())
+        for key, value in self.budget_override.items():
+            if value is not None:
+                setattr(self.budget, key, value)
         body = {"instance_id": instance_id, "budget": {
             "tool_calls": self.budget.tool_calls, "time_minutes": self.budget.time_minutes,
             "turns": self.budget.turns,

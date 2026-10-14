@@ -144,19 +144,36 @@ def save_lora(model, out_dir, r, alpha, dropout):
 
 # ───────────────────────────── модель ─────────────────────────────
 
-def load_model(r=32, alpha=64, dropout=0.05):
+def describe_first_projection(model):
+    """Что за слой стоит на месте q_proj: нужно, чтобы понять формат весов, когда CompressedLinear нет."""
+    for n, m in model.named_modules():
+        if n.endswith("layers.0.self_attn.q_proj"):
+            print(f"   {n}: {type(m).__name__}, forward={getattr(m.forward, '__qualname__', m.forward)}", flush=True)
+            for pn, p in list(m.named_parameters()) + list(m.named_buffers()):
+                print(f"      {pn}: {tuple(p.shape)} {p.dtype}", flush=True)
+            print(f"      quantization_status={getattr(m, 'quantization_status', None)}", flush=True)
+            return
+
+
+def load_model(r=32, alpha=64, dropout=0.05, decompress=False):
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    print(f"Загрузка {MODEL_NAME} ...", flush=True)
+    print(f"Загрузка {MODEL_NAME} (decompress={decompress}) ...", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    kwargs = {}
+    if decompress:   # веса сразу в bf16 (~62 ГБ): нужен GPU на 80 ГБ; зато обычный Linear с .weight
+        from transformers import CompressedTensorsConfig
+        kwargs["quantization_config"] = CompressedTensorsConfig(run_compressed=False)
     # run_compressed читается только при загрузке; менять quantization_config потом бесполезно.
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map={"": 0}, torch_dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map={"": 0}, torch_dtype="auto", **kwargs)
     model.config.use_cache = False
     n_compressed = sum(1 for _, m in model.named_modules() if type(m).__name__ == "CompressedLinear")
     print(f"   CompressedLinear: {n_compressed}", flush=True)
-    if n_compressed == 0:
-        print("   ВНИМАНИЕ: веса распакованы при загрузке (bf16) -- памяти понадобится ~62 ГБ", flush=True)
+    describe_first_projection(model)
+    if n_compressed == 0 and not decompress:
+        print("   ВНИМАНИЕ: CompressedLinear нет; слои остались упакованными, но без .weight -- "
+              "forward упадёт. Пробуйте --decompress (80 ГБ) или собственную распаковку.", flush=True)
     model.requires_grad_(False)
     print_vram("после загрузки")
     model = inject_lora(model, r, alpha, dropout)
@@ -263,7 +280,7 @@ def masked_nll(model, input_ids, mask):
 def train(args):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    model, tokenizer = load_model(args.r, args.alpha, args.dropout)
+    model, tokenizer = load_model(args.r, args.alpha, args.dropout, args.decompress)
     rows = load_examples(args.data, tokenizer, None, args.max_len, role=args.role)
     if len(rows) < 2:
         raise RuntimeError("слишком мало примеров для обучения")
@@ -330,7 +347,7 @@ def train(args):
 
 def diagnose(args):
     """Загрузка + один forward/backward на коротком примере: проверка памяти и того, что градиент доходит до LoRA."""
-    model, tokenizer = load_model(args.r, args.alpha, args.dropout)
+    model, tokenizer = load_model(args.r, args.alpha, args.dropout, args.decompress)
     model.train()
     text = "def add(a, b):\n    return a + b\n" * max(1, args.seq_len // 12)
     ids = tokenizer(text, return_tensors="pt", truncation=True, max_length=args.seq_len).input_ids
@@ -369,6 +386,8 @@ def main():
     ap.add_argument("--log-every", type=int, default=5)
     ap.add_argument("--eval-every", type=int, default=25)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--decompress", action="store_true",
+                    help="загрузить веса сразу в bf16 (run_compressed=False): ~62 ГБ, нужен GPU на 80 ГБ")
     args = ap.parse_args()
     if args.mode == "train" and not args.data:
         ap.error("--data обязателен для train")

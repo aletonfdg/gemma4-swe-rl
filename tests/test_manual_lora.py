@@ -75,7 +75,7 @@ def test_saved_adapter_has_peft_keys_and_no_tokenizer(tmp_path):
 class FakeTokenizer:
     """Посимвольный «токенизатор» с шаблоном в духе Gemma: позволяет проверить маску без модели."""
 
-    def apply_chat_template(self, msgs, tools=None, tokenize=False, add_generation_prompt=False):
+    def apply_chat_template(self, msgs, tools=None, tokenize=False, add_generation_prompt=False, **kw):
         out = "<bos>"
         for m in msgs:
             body = m.get("content") or ""
@@ -124,6 +124,55 @@ def test_invalid_json_arguments_do_not_break_rendering():
     msgs[1]["tool_calls"][0]["function"]["arguments"] = "{oops"
     ex = build_example(msgs, FakeTokenizer(), tools=None, max_length=10_000)
     assert "[call read_file {}]" in "".join(chr(i) for i in ex["input_ids"])
+
+
+class GemmaLikeTokenizer(FakeTokenizer):
+    """Шаблон в духе Gemma 4: весь диалог агента -- один ход модели, ответы инструментов стоят внутри хода
+    сразу после вызова, у вызова без ответа в конце стоит маркер начала ответа, а подсказка генерации
+    после сообщения пользователя добавляет пустой канал мысли (его нет в рендере диалога)."""
+
+    def apply_chat_template(self, msgs, tools=None, tokenize=False, add_generation_prompt=False, **kw):
+        out, in_model_turn = "<bos>", False
+        for k, m in enumerate(msgs):
+            if m["role"] == "tool":
+                continue
+            if m["role"] == "user":
+                out += f"<|turn>user\n{m['content']}<turn|>\n"
+                in_model_turn = False
+                continue
+            if not in_model_turn:
+                out += "<|turn>model\n"
+                in_model_turn = True
+            calls = m.get("tool_calls") or []
+            for tc in calls:
+                args = tc["function"]["arguments"]
+                if not isinstance(args, dict):
+                    raise ValueError("arguments must be a JSON object (mapping), not a string")
+                out += f"<|tool_call>call:{tc['function']['name']}{json.dumps(args)}<tool_call|>"
+            if calls:
+                followed = False
+                for nxt in msgs[k + 1:]:
+                    if nxt["role"] != "tool":
+                        break
+                    out += f"<|tool_response>response:{nxt['content']}<tool_response|>"
+                    followed = True
+                if not followed:
+                    out += "<|tool_response>"
+            else:
+                out += (m.get("content") or "") + "<turn|>\n"
+                in_model_turn = False
+        if add_generation_prompt and msgs and msgs[-1]["role"] == "user":
+            out += "<|turn>model\n<|channel>thought\n<channel|>"
+        return out
+
+
+def test_gemma_like_template_marks_calls_and_the_marker_that_starts_the_tool_response():
+    ex = build_example(conversation(), GemmaLikeTokenizer(), tools=None, max_length=10_000)
+    text = "".join(chr(i) for i in ex["input_ids"])
+    marked = "".join(ch for ch, m in zip(text, ex["mask"]) if m)
+    assert marked == '<|tool_call>call:read_file{"filepath": "a.py"}<tool_call|><|tool_response>done<turn|>\n'
+    assert "response:code" in text and "fix it" not in marked           # ответ инструмента не обучается
+    assert "<|turn>model\n" not in marked                                # заголовок хода пропущен
 
 
 def test_too_long_example_is_dropped_not_truncated():

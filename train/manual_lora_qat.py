@@ -191,8 +191,12 @@ class TemplateMismatch(ValueError):
     pass
 
 
-def _render(tokenizer, msgs, tools, gen_prompt=False):
-    return tokenizer.apply_chat_template(msgs, tools=tools, tokenize=False, add_generation_prompt=gen_prompt)
+MODEL_TURN = "<|turn>model\n"   # заголовок хода модели в шаблоне Gemma 4
+
+
+def _render(tokenizer, msgs, tools, gen_prompt=False, enable_thinking=False):
+    return tokenizer.apply_chat_template(msgs, tools=tools, tokenize=False, add_generation_prompt=gen_prompt,
+                                         enable_thinking=enable_thinking)
 
 
 def clean_messages(messages):
@@ -229,20 +233,35 @@ def truncate_before_first_write(messages):
     return messages
 
 
-def build_example(messages, tokenizer, tools, max_length):
+def _span_start(tokenizer, msgs, k, tools, full, upto, thinking):
+    """Где в полном тексте начинается ответ ассистента k. Подсказка генерации годится, если она префикс
+    полного текста. Шаблон Gemma 4 этого не обеспечивает на первом ходе: подсказка добавляет пустой
+    канал мысли, которого нет в рендере диалога; тогда берём конец рендера без подсказки и
+    пропускаем заголовок хода модели."""
+    before_g = _render(tokenizer, msgs[:k], tools, gen_prompt=True, enable_thinking=thinking)
+    if upto.startswith(before_g):
+        return len(before_g)
+    before = _render(tokenizer, msgs[:k], tools, enable_thinking=thinking)
+    if not upto.startswith(before):
+        raise TemplateMismatch(f"шаблон не префиксно-устойчив на сообщении {k}: маску так не построить")
+    return len(before) + (len(MODEL_TURN) if upto.startswith(MODEL_TURN, len(before)) else 0)
+
+
+def build_example(messages, tokenizer, tools, max_length, thinking=False):
     """-> {"input_ids", "mask"}; mask=1 на токенах ответов ассистента (включая конец хода), иначе 0.
-    None, если пример длиннее max_length (обрезать слева нельзя: потеряется условие задачи)."""
+    None, если пример длиннее max_length (обрезать слева нельзя: потеряется условие задачи).
+    В шаблоне Gemma 4 ответы инструментов вставлены внутрь хода модели сразу после её вызова, поэтому
+    ответ ассистента k заканчивается там, где шаблон ставит маркер начала ответа инструмента."""
     msgs = clean_messages(messages)
-    full = _render(tokenizer, msgs, tools)
+    full = _render(tokenizer, msgs, tools, enable_thinking=thinking)
     spans = []
     for k, m in enumerate(msgs):
         if m.get("role") != "assistant" or k == 0:
             continue
-        before = _render(tokenizer, msgs[:k], tools, gen_prompt=True)
-        upto = _render(tokenizer, msgs[:k + 1], tools)
-        if not (upto.startswith(before) and full.startswith(upto)):
+        upto = _render(tokenizer, msgs[:k + 1], tools, enable_thinking=thinking)
+        if not full.startswith(upto):
             raise TemplateMismatch(f"шаблон не префиксно-устойчив на сообщении {k}: маску так не построить")
-        spans.append((len(before), len(upto)))
+        spans.append((_span_start(tokenizer, msgs, k, tools, full, upto, thinking), len(upto)))
     if not spans:
         return None
     enc = tokenizer(full, add_special_tokens=False, return_offsets_mapping=True)

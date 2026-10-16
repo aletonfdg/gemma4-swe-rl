@@ -147,7 +147,7 @@ def save_lora(model, out_dir, r, alpha, dropout):
 def describe_first_projection(model):
     """Что за слой стоит на месте q_proj: нужно, чтобы понять формат весов, когда CompressedLinear нет."""
     for n, m in model.named_modules():
-        if n.endswith("layers.0.self_attn.q_proj"):
+        if n.endswith("layers.0.self_attn.q_proj") and not any(s in n for s in VISION_SUBTREES):
             print(f"   {n}: {type(m).__name__}, forward={getattr(m.forward, '__qualname__', m.forward)}", flush=True)
             for pn, p in list(m.named_parameters()) + list(m.named_buffers()):
                 print(f"      {pn}: {tuple(p.shape)} {p.dtype}", flush=True)
@@ -197,15 +197,24 @@ def _render(tokenizer, msgs, tools, gen_prompt=False):
 
 def clean_messages(messages):
     """Без рассуждений: шаблон на инференсе вырезает старые рассуждения из истории, и при обучении
-    модель видела бы другой контекст, чем в бою. Аргументы вызовов -- строкой JSON, как отдаёт vLLM."""
+    модель видела бы другой контекст, чем в бою. Аргументы вызовов -- словарём: шаблон Gemma 4 не берёт
+    строку JSON (в файлах траекторий они лежат строкой, как отдаёт vLLM)."""
+    def as_mapping(arguments):
+        if isinstance(arguments, dict):
+            return arguments
+        try:
+            parsed = json.loads(arguments or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
     out = []
     for m in messages:
         m = {k: v for k, v in m.items() if k not in ("reasoning_content", "reasoning", "thinking")}
         if m.get("tool_calls"):
-            m["tool_calls"] = [dict(tc, function=dict(tc["function"], arguments=(
-                tc["function"]["arguments"] if isinstance(tc["function"]["arguments"], str)
-                else json.dumps(tc["function"]["arguments"], ensure_ascii=False))))
-                for tc in m["tool_calls"]]
+            m["tool_calls"] = [dict(tc, function=dict(tc["function"],
+                                                      arguments=as_mapping(tc["function"].get("arguments"))))
+                               for tc in m["tool_calls"]]
         out.append(m)
     return out
 

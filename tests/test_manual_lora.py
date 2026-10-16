@@ -80,7 +80,10 @@ class FakeTokenizer:
         for m in msgs:
             body = m.get("content") or ""
             for tc in m.get("tool_calls") or []:
-                body += f"[call {tc['function']['name']} {tc['function']['arguments']}]"
+                args = tc["function"]["arguments"]
+                if not isinstance(args, dict):     # как настоящий шаблон Gemma 4
+                    raise ValueError("arguments must be a JSON object (mapping), not a string")
+                body += f"[call {tc['function']['name']} {json.dumps(args)}]"
             out += f"<{m['role']}>{body}<end>"
         return out + ("<assistant>" if add_generation_prompt else "")
 
@@ -104,8 +107,23 @@ def test_mask_covers_exactly_assistant_turns_without_reasoning():
     text = "".join(chr(i) for i in ex["input_ids"])
     marked = "".join(ch for ch, m in zip(text, ex["mask"]) if m)
     assert "SECRET" not in text                                # рассуждения вырезаны
-    assert marked == '[call read_file {"filepath": "a.py"}]<end>done<end>'   # аргументы -> JSON-строка
+    assert marked == '[call read_file {"filepath": "a.py"}]<end>done<end>'
     assert "fix it" not in marked and "code" not in marked
+
+
+def test_string_arguments_from_trajectory_files_become_mappings():
+    msgs = conversation()
+    msgs[1]["tool_calls"][0]["function"]["arguments"] = '{"filepath": "a.py"}'   # так лежит в jsonl (vLLM)
+    ex = build_example(msgs, FakeTokenizer(), tools=None, max_length=10_000)
+    text = "".join(chr(i) for i in ex["input_ids"])
+    assert '[call read_file {"filepath": "a.py"}]' in text
+
+
+def test_invalid_json_arguments_do_not_break_rendering():
+    msgs = conversation()
+    msgs[1]["tool_calls"][0]["function"]["arguments"] = "{oops"
+    ex = build_example(msgs, FakeTokenizer(), tools=None, max_length=10_000)
+    assert "[call read_file {}]" in "".join(chr(i) for i in ex["input_ids"])
 
 
 def test_too_long_example_is_dropped_not_truncated():

@@ -310,6 +310,30 @@ def test_remote_env_full_episode_through_run_episode(server):
     assert steps and docker.containers == {}
 
 
+def test_episode_keeps_the_models_reasoning_for_training(server):
+    from rl.rollout import run_episode
+    url, docker = server
+    env = MimoRemoteEnv(url, "secret", poll_sleep=0.05)
+
+    class ThinkingLLM:
+        def __init__(self):
+            self.script = [("edit_file", FIX), ("submit_patch", {})]
+
+        def chat(self, messages, schemas, temperature=0.0, lora_name=None):
+            if not self.script:
+                return dict(content="done", tool_calls=[], token_logprobs=[], finish_reason="stop")
+            name, args = self.script.pop(0)
+            return dict(content="", reasoning=f"think before {name}", token_logprobs=[], finish_reason="tool_calls",
+                        tool_calls=[{"id": f"c{len(self.script)}", "name": name,
+                                     "arguments": json.dumps(args)}])
+
+    _, messages, passed = run_episode(env, 0, ThinkingLLM(), None, None, temperature=0.0)
+    thoughts = [m.get("thought") for m in messages if m["role"] == "assistant"]
+    assert passed is True
+    assert thoughts[:2] == ["think before edit_file", "think before submit_patch"]
+    assert thoughts[2:] == [None] * len(thoughts[2:])         # у хода без рассуждения ключа нет
+
+
 def test_baseline_runner_records_where_the_time_goes(server, tmp_path):
     import argparse
     from sim import run_mimo_baseline as rb

@@ -84,6 +84,8 @@ def run_episode(env: SWEEnv, task_idx: int, llm_client, snapshots_dir: str, dock
         turn += 1
 
         assistant_msg = {"role": "assistant", "content": out["content"]}
+        if out.get("reasoning"):
+            assistant_msg["thought"] = out["reasoning"]    # для обучения; LLMClient не отправляет его модели
         if out["tool_calls"]:
             assistant_msg["tool_calls"] = [
                 {"id": tc["id"], "type": "function",

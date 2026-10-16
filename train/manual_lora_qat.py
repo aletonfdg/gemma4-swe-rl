@@ -199,10 +199,12 @@ def _render(tokenizer, msgs, tools, gen_prompt=False, enable_thinking=False):
                                          enable_thinking=enable_thinking)
 
 
-def clean_messages(messages):
-    """Без рассуждений: шаблон на инференсе вырезает старые рассуждения из истории, и при обучении
-    модель видела бы другой контекст, чем в бою. Аргументы вызовов -- словарём: шаблон Gemma 4 не берёт
-    строку JSON (в файлах траекторий они лежат строкой, как отдаёт vLLM)."""
+def clean_messages(messages, keep_last_reasoning=False):
+    """Без рассуждений: в бою прошлые рассуждения в историю не возвращаются, и при обучении модель
+    видела бы другой контекст. Исключение -- цель обучения: с keep_last_reasoning рассуждение
+    последнего сообщения ассистента (ключ `thought` из файлов траекторий) остаётся как
+    reasoning_content, и шаблон рисует его каналом мысли. Аргументы вызовов -- словарём: шаблон
+    Gemma 4 не берёт строку JSON (в файлах траекторий они лежат строкой, как отдаёт vLLM)."""
     def as_mapping(arguments):
         if isinstance(arguments, dict):
             return arguments
@@ -212,9 +214,13 @@ def clean_messages(messages):
             return {}
         return parsed if isinstance(parsed, dict) else {}
 
+    last_assistant = max((k for k, m in enumerate(messages) if m.get("role") == "assistant"), default=-1)
     out = []
-    for m in messages:
-        m = {k: v for k, v in m.items() if k not in ("reasoning_content", "reasoning", "thinking")}
+    for k, m in enumerate(messages):
+        thought = m.get("thought") or m.get("reasoning_content") or m.get("reasoning")
+        m = {key: v for key, v in m.items() if key not in ("reasoning_content", "reasoning", "thinking", "thought")}
+        if keep_last_reasoning and k == last_assistant and thought:
+            m["reasoning_content"] = thought
         if m.get("tool_calls"):
             m["tool_calls"] = [dict(tc, function=dict(tc["function"],
                                                       arguments=as_mapping(tc["function"].get("arguments"))))
@@ -247,16 +253,21 @@ def _span_start(tokenizer, msgs, k, tools, full, upto, thinking):
     return len(before) + (len(MODEL_TURN) if upto.startswith(MODEL_TURN, len(before)) else 0)
 
 
-def build_example(messages, tokenizer, tools, max_length, thinking=False):
+def build_example(messages, tokenizer, tools, max_length, thinking=False, target="all"):
     """-> {"input_ids", "mask"}; mask=1 на токенах ответов ассистента (включая конец хода), иначе 0.
     None, если пример длиннее max_length (обрезать слева нельзя: потеряется условие задачи).
     В шаблоне Gemma 4 ответы инструментов вставлены внутрь хода модели сразу после её вызова, поэтому
-    ответ ассистента k заканчивается там, где шаблон ставит маркер начала ответа инструмента."""
-    msgs = clean_messages(messages)
+    ответ ассистента k заканчивается там, где шаблон ставит маркер начала ответа инструмента.
+    target="last": обучается только последний ход ассистента вместе с его рассуждением (история без
+    рассуждений, как в бою); thinking=True добавляет в системное сообщение `<|think|>`."""
+    last_only = target == "last"
+    msgs = clean_messages(messages, keep_last_reasoning=last_only)
+    if last_only and (not msgs or msgs[-1].get("role") != "assistant"):
+        return None
     full = _render(tokenizer, msgs, tools, enable_thinking=thinking)
     spans = []
     for k, m in enumerate(msgs):
-        if m.get("role") != "assistant" or k == 0:
+        if m.get("role") != "assistant" or k == 0 or (last_only and k != len(msgs) - 1):
             continue
         upto = _render(tokenizer, msgs[:k + 1], tools, enable_thinking=thinking)
         if not full.startswith(upto):
@@ -285,7 +296,8 @@ def load_examples(path, tokenizer, tools, max_length, role="main"):
                 continue
             ex = json.loads(line)
             msgs = ex["messages"] if role == "main" else truncate_before_first_write(ex["messages"])
-            item = build_example(msgs, tokenizer, ex.get("tools") or tools or TOOL_SCHEMAS, max_length)
+            item = build_example(msgs, tokenizer, ex.get("tools") or tools or TOOL_SCHEMAS, max_length,
+                                 thinking=bool(ex.get("thinking")), target=ex.get("target", "all"))
             if item is None:
                 stats["long" if msgs else "empty"] += 1
                 continue

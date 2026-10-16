@@ -49,11 +49,12 @@ def load_run(run_dir):
     return out
 
 
-def reject_reason(row, dialog):
-    """None, если эпизод годится для обучения, иначе короткая причина отказа."""
+def reject_reason(row, dialog, allow_compacted=False):
+    """None, если эпизод годится для обучения, иначе короткая причина отказа. allow_compacted: режим по
+    ходам берёт короткие префиксы (до ~8k токенов), до которых сжатие контекста (~14k) не доходило."""
     if not row.get("passed"):
         return "not_passed"
-    if (row.get("timing") or {}).get("compactions", 0) > 0:
+    if not allow_compacted and (row.get("timing") or {}).get("compactions", 0) > 0:
         return "compacted"
     messages = dialog.get("messages") or []
     called = []
@@ -89,6 +90,39 @@ def to_record(dialog, system, tools):
     return {"messages": [{"role": "system", "content": system}] + dialog["messages"], "tools": tools}
 
 
+def select_turns(messages, count):
+    """Индексы ходов ассистента для обучения: первый (поиск места), первая правка, последний, остальные
+    равномерно. Ходы без вызова инструмента (итоговый текст) считаются обычными."""
+    idx = [k for k, m in enumerate(messages) if m.get("role") == "assistant"]
+    if not idx or count <= 0:
+        return []
+    chosen = {idx[0], idx[-1]}
+    for k in idx:
+        if any(tc["function"]["name"] in ("edit_file", "write_file") for tc in messages[k].get("tool_calls") or []):
+            chosen.add(k)
+            break
+    rest = [k for k in idx if k not in chosen]
+    need = count - len(chosen)
+    if need > 0 and rest:
+        step = len(rest) / need
+        chosen.update(rest[int(i * step)] for i in range(min(need, len(rest))))
+    return sorted(chosen)
+
+
+def to_turn_records(dialog, system, tools, count, max_thought_chars):
+    """По записи на выбранный ход: история без рассуждений, цель -- рассуждение и вызов этого хода.
+    Ходы без записанного рассуждения или со слишком длинным пропускаем: учим коротко думать."""
+    messages = dialog["messages"]
+    records = []
+    for k in select_turns(messages, count):
+        thought = (messages[k].get("thought") or "").strip()
+        if not thought or len(thought) > max_thought_chars:
+            continue
+        records.append({"messages": [{"role": "system", "content": system}] + messages[:k + 1], "tools": tools,
+                        "target": "last", "thinking": True})
+    return records
+
+
 def split_tasks(task_ids, holdout_frac):
     """Детерминированно: сортируем по sha1 идентификатора, первые доли -- отложенные."""
     ordered = sorted(set(task_ids), key=lambda t: hashlib.sha1(t.encode()).hexdigest())
@@ -96,13 +130,15 @@ def split_tasks(task_ids, holdout_frac):
     return set(ordered[n_hold:]), set(ordered[:n_hold])      # (обучающие, отложенные)
 
 
-def build(runs, system, per_task=3, holdout_frac=0.3):
+def build(runs, system, per_task=3, holdout_frac=0.3, turns=0, max_thought_chars=3000):
+    """turns=0: по примеру на весь эпизод (рассуждений нет). turns>0: по примеру на каждый из `turns`
+    выбранных ходов эпизода, с рассуждением модели в цели обучения."""
     tools = [t for t in ROOT_TOOL_SCHEMAS if t["function"]["name"] in ALLOWED_TOOLS]
     rejected = Counter()
     by_task = defaultdict(list)
     for run_dir in runs:
         for row, dialog in load_run(run_dir):
-            reason = reject_reason(row, dialog)
+            reason = reject_reason(row, dialog, allow_compacted=bool(turns))
             if reason:
                 if row.get("passed"):
                     rejected[reason] += 1
@@ -112,7 +148,10 @@ def build(runs, system, per_task=3, holdout_frac=0.3):
     records = []
     for task in sorted(train_tasks):
         for _, dialog in sorted(by_task[task], key=lambda x: x[0])[:per_task]:
-            records.append(to_record(dialog, system, tools))
+            if turns:
+                records.extend(to_turn_records(dialog, system, tools, turns, max_thought_chars))
+            else:
+                records.append(to_record(dialog, system, tools))
     return records, sorted(train_tasks), sorted(held_tasks), rejected, {t: len(v) for t, v in by_task.items()}
 
 
@@ -123,11 +162,16 @@ def main():
     ap.add_argument("--out", default="data/sft_trajectories.jsonl")
     ap.add_argument("--per-task", type=int, default=3)
     ap.add_argument("--holdout-frac", type=float, default=0.3)
+    ap.add_argument("--turns", type=int, default=0,
+                    help="0: пример на весь эпизод; N>0: пример на каждый из N ходов с рассуждением")
+    ap.add_argument("--max-thought-chars", type=int, default=3000,
+                    help="ходы с более длинным рассуждением пропускаются (учим коротко думать)")
     args = ap.parse_args()
     with open(args.system, encoding="utf-8") as f:
         system = f.read()
     records, train_tasks, held_tasks, rejected, avail = build(args.runs, system, args.per_task,
-                                                              args.holdout_frac)
+                                                              args.holdout_frac, args.turns,
+                                                              args.max_thought_chars)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for rec in records:

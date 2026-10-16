@@ -131,8 +131,9 @@ class GemmaLikeTokenizer(FakeTokenizer):
     сразу после вызова, у вызова без ответа в конце стоит маркер начала ответа, а подсказка генерации
     после сообщения пользователя добавляет пустой канал мысли (его нет в рендере диалога)."""
 
-    def apply_chat_template(self, msgs, tools=None, tokenize=False, add_generation_prompt=False, **kw):
-        out, in_model_turn = "<bos>", False
+    def apply_chat_template(self, msgs, tools=None, tokenize=False, add_generation_prompt=False,
+                            enable_thinking=False, **kw):
+        out, in_model_turn = "<bos>" + ("<|think|>" if enable_thinking else ""), False
         for k, m in enumerate(msgs):
             if m["role"] == "tool":
                 continue
@@ -143,6 +144,8 @@ class GemmaLikeTokenizer(FakeTokenizer):
             if not in_model_turn:
                 out += "<|turn>model\n"
                 in_model_turn = True
+            if m.get("reasoning_content"):
+                out += f"<|channel>thought\n{m['reasoning_content']}\n<channel|>"
             calls = m.get("tool_calls") or []
             for tc in calls:
                 args = tc["function"]["arguments"]
@@ -162,7 +165,9 @@ class GemmaLikeTokenizer(FakeTokenizer):
                 out += (m.get("content") or "") + "<turn|>\n"
                 in_model_turn = False
         if add_generation_prompt and msgs and msgs[-1]["role"] == "user":
-            out += "<|turn>model\n<|channel>thought\n<channel|>"
+            out += "<|turn>model\n" + ("" if enable_thinking else "<|channel>thought\n<channel|>")
+        elif add_generation_prompt and msgs and msgs[-1]["role"] == "tool" and enable_thinking:
+            out += "<|channel>thought\n"
         return out
 
 
@@ -173,6 +178,31 @@ def test_gemma_like_template_marks_calls_and_the_marker_that_starts_the_tool_res
     assert marked == '<|tool_call>call:read_file{"filepath": "a.py"}<tool_call|><|tool_response>done<turn|>\n'
     assert "response:code" in text and "fix it" not in marked           # ответ инструмента не обучается
     assert "<|turn>model\n" not in marked                                # заголовок хода пропущен
+
+
+def test_last_turn_target_trains_thought_and_call_with_history_without_thoughts():
+    msgs = conversation()
+    msgs[1]["thought"], msgs[3]["thought"] = "old plan", "final check"
+    ex = build_example(msgs, GemmaLikeTokenizer(), tools=None, max_length=10_000, thinking=True, target="last")
+    text = "".join(chr(i) for i in ex["input_ids"])
+    marked = "".join(ch for ch, m in zip(text, ex["mask"]) if m)
+    assert marked == "final check\n<channel|>done<turn|>\n"      # после подсказки генерации `<|channel>thought\n`
+    assert "old plan" not in text and text.startswith("<bos><|think|>")   # история без рассуждений
+
+
+def test_last_turn_target_on_the_first_assistant_turn_includes_the_thought_channel():
+    msgs = conversation()[:2]
+    msgs[1]["thought"] = "read the file first"
+    ex = build_example(msgs, GemmaLikeTokenizer(), tools=None, max_length=10_000, thinking=True, target="last")
+    text = "".join(chr(i) for i in ex["input_ids"])
+    marked = "".join(ch for ch, m in zip(text, ex["mask"]) if m)
+    assert marked == ('<|channel>thought\nread the file first\n<channel|>'
+                      '<|tool_call>call:read_file{"filepath": "a.py"}<tool_call|><|tool_response>')
+
+
+def test_last_turn_target_rejects_examples_that_do_not_end_with_the_assistant():
+    assert build_example(conversation()[:3], GemmaLikeTokenizer(), tools=None, max_length=10_000,
+                         thinking=True, target="last") is None
 
 
 def test_too_long_example_is_dropped_not_truncated():

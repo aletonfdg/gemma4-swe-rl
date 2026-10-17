@@ -39,9 +39,13 @@ def dialog_name(row):
 def load_run(run_dir):
     """-> [(row, dialog)] для всех эпизодов папки, у которых есть сохранённый диалог."""
     out = []
+    last = {}      # как в раннере: повторный запуск дописывает новую строку вместо упавшей, берём последнюю
     with open(os.path.join(run_dir, "results.jsonl"), encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f if line.strip()]
-    for row in rows:
+        for line in f:
+            if line.strip():
+                row = json.loads(line)
+                last[(row["instance_id"], row.get("rep", 0))] = row
+    for row in last.values():
         path = os.path.join(run_dir, "messages", dialog_name(row))
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:

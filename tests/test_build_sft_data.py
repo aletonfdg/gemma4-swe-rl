@@ -83,6 +83,17 @@ def test_holdout_split_is_deterministic_and_disjoint():
     assert (a, b) == split_tasks(list(reversed(tasks)), 0.3) and not (a & b) and len(b) == 3
 
 
+def test_rerun_rows_replace_failed_ones_like_in_the_runner(tmp_path):
+    from train.build_sft_data import load_run
+    run = tmp_path / "run"
+    (run / "messages").mkdir(parents=True)
+    (run / "messages" / "t.json").write_text(json.dumps(dialog()), encoding="utf-8")
+    failed = {"instance_id": "t", "rep": 0, "passed": False, "error": "SandboxUnavailable: docker"}
+    (run / "results.jsonl").write_text(json.dumps(failed) + "\n" + json.dumps(row("t")) + "\n", encoding="utf-8")
+    loaded = load_run(str(run))
+    assert len(loaded) == 1 and loaded[0][0]["passed"] is True
+
+
 def test_build_end_to_end_turn_mode(tmp_path):
     run = tmp_path / "run"
     (run / "messages").mkdir(parents=True)

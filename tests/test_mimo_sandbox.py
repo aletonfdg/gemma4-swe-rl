@@ -227,6 +227,42 @@ def test_slots_busy_then_freed_on_abort(docker):
     mgr.abort(mgr.start("t-1")["session_id"])
 
 
+def test_prune_images_removes_image_only_after_the_last_session_and_verification(docker):
+    mgr = SessionManager({"t-1": make_task()}, runner=docker, max_sessions=2, prune_images=True)
+    first, second = mgr.start("t-1"), mgr.start("t-1")
+    mgr.abort(first["session_id"])
+    assert docker.removed_images == []                       # вторая сессия ещё держит образ
+    json.loads(mgr.tool(second["session_id"], "edit_file", FIX))
+    res = mgr.finish(second["session_id"])                   # проверка патча идёт до удаления образа
+    assert res["passed"] is True
+    assert docker.removed_images == ["xiaomimimo/mimo-v2.6-rl-oss:t-1"]
+    mgr.abort(mgr.start("t-1")["session_id"])                # повтор той же задачи: образ снова нужен и снова уходит
+    assert len(docker.removed_images) == 2
+
+
+def test_images_are_kept_by_default(docker):
+    mgr = SessionManager({"t-1": make_task()}, runner=docker, max_sessions=1)
+    mgr.abort(mgr.start("t-1")["session_id"])
+    assert docker.removed_images == []
+
+
+def test_failed_start_does_not_leak_the_image_hold(docker):
+    class Failing(type(docker)):
+        def run(self, args, input=None, timeout=None):
+            if args[0] == "run":
+                return 1, b"", b"boom"
+            return super().run(args, input, timeout)
+
+    bad = Failing(docker.base)
+    mgr = SessionManager({"t-1": make_task()}, runner=bad, max_sessions=1, prune_images=True)
+    from sim.mimo_sandbox import SandboxError
+    with pytest.raises(SandboxError):
+        mgr.start("t-1")
+    assert bad.removed_images == ["xiaomimimo/mimo-v2.6-rl-oss:t-1"] and mgr._image_users == {}
+    with pytest.raises(SandboxError):
+        mgr.start("t-1")                                     # слот освобождён, счётчик не утёк
+
+
 def test_abort_all_frees_every_slot_and_container(docker):
     mgr = SessionManager({"t-1": make_task()}, runner=docker, max_sessions=2)
     mgr.start("t-1")

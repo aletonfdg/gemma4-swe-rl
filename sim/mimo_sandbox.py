@@ -370,14 +370,38 @@ def verify_patch(runner, task, patch, mem="4g", cpus=2.0, image_prefix=REGISTRY,
 
 class SessionManager:
     def __init__(self, tasks, runner=None, max_sessions=3, ttl_seconds=3600, mem="4g", cpus=2.0,
-                 image_prefix=REGISTRY, verify_timeout_cap=900):
+                 image_prefix=REGISTRY, verify_timeout_cap=900, prune_images=False):
         self.tasks = tasks
         self.runner = runner or DockerRunner()
         self.mem, self.cpus, self.image_prefix = mem, cpus, image_prefix
         self.ttl, self.verify_timeout_cap = ttl_seconds, verify_timeout_cap
+        self.prune_images = prune_images    # удалять образ задачи, когда он больше никому не нужен
+        self._image_users = {}              # образ -> сколько сессий его держат (с проверкой патча)
         self._sessions = {}
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(max_sessions)
+
+    def _hold_image(self, sess):
+        image = getattr(sess, "image", None)
+        if image:
+            with self._lock:
+                self._image_users[image] = self._image_users.get(image, 0) + 1
+
+    def _drop_image(self, sess):
+        """Образ задачи в 1-7 ГБ: массовый прогон по сотням задач иначе забивает диск. Удаляем, когда
+        последняя сессия на нём закончилась (после проверки патча); занятый контейнером образ docker
+        не даст удалить, так что гонка с новым стартом той же задачи безвредна (образ скачается снова)."""
+        image = getattr(sess, "image", None)
+        if not image:
+            return
+        with self._lock:
+            left = self._image_users.get(image, 0) - 1
+            if left > 0:
+                self._image_users[image] = left
+                return
+            self._image_users.pop(image, None)
+        if self.prune_images:
+            self.runner.run(["rmi", image], timeout=600)
 
     def _release(self, sid):
         with self._lock:
@@ -385,6 +409,7 @@ class SessionManager:
         if entry:
             entry["session"].stop()
             self._slots.release()
+            self._drop_image(entry["session"])
         return entry
 
     def start(self, instance_id, budget_dict=None):
@@ -394,11 +419,15 @@ class SessionManager:
         if not self._slots.acquire(blocking=False):
             raise Busy("все слоты заняты")
         sid = uuid.uuid4().hex
+        sess = None
         try:
             sess = self._make_session(task, Budget.from_dict(budget_dict))
+            self._hold_image(sess)
             sess.start()
         except BaseException:
             self._slots.release()
+            if sess is not None:
+                self._drop_image(sess)
             raise
         with self._lock:
             self._sessions[sid] = {"session": sess, "created": time.time()}

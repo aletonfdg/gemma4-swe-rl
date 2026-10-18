@@ -204,6 +204,9 @@ def main():
     ap.add_argument("--mem", default="4g")
     ap.add_argument("--cpus", type=float, default=2.0)
     ap.add_argument("--limit", type=int, default=None, help="взять только первые N задач")
+    ap.add_argument("--prune-images", action="store_true",
+                    help="--data (MiMo): удалять образ задачи после эпизода (образы 1-7 ГБ, на сотни задач "
+                         "диска не хватит); повтор той же задачи скачает образ заново")
     args = ap.parse_args()
 
     token = args.token or os.environ.get("SWE_SANDBOX_TOKEN") or secrets.token_urlsafe(24)
@@ -226,7 +229,7 @@ def main():
     else:
         tasks = load_tasks(args.data, args.limit)
         manager = SessionManager(tasks, max_sessions=args.max_sessions, ttl_seconds=args.ttl,
-                                 mem=args.mem, cpus=args.cpus)
+                                 mem=args.mem, cpus=args.cpus, prune_images=args.prune_images)
     try:
         stale = manager.remove_stale_containers()
         if stale:

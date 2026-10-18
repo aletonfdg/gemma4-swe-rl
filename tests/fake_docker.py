@@ -35,6 +35,7 @@ class FakeDocker:
         self.bash = find_bash()
         self.containers = {}
         self.images = []
+        self.removed_images = []
 
     def _map(self, s, root):
         def repl(m):
@@ -61,6 +62,9 @@ class FakeDocker:
             root = self.containers.pop(args[-1], None)
             if root:
                 shutil.rmtree(root, ignore_errors=True)
+            return 0, b"", b""
+        if op == "rmi":
+            self.removed_images.append(args[-1])
             return 0, b"", b""
         if op == "exec":
             name = args[4]

@@ -157,8 +157,9 @@ def describe_first_projection(model):
 
 def load_model(r=32, alpha=64, dropout=0.05, decompress=False):
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    print(f"Загрузка {MODEL_NAME} (decompress={decompress}) ...", flush=True)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    src = os.environ.get("GEMMA_MODEL_DIR") or MODEL_NAME   # локальная копия (Colab: /content/model) вместо повторной загрузки
+    print(f"Загрузка {src} (decompress={decompress}) ...", flush=True)
+    tokenizer = AutoTokenizer.from_pretrained(src)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     kwargs = {}
@@ -166,7 +167,7 @@ def load_model(r=32, alpha=64, dropout=0.05, decompress=False):
         from transformers import CompressedTensorsConfig
         kwargs["quantization_config"] = CompressedTensorsConfig(run_compressed=False)
     # run_compressed читается только при загрузке; менять quantization_config потом бесполезно.
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map={"": 0}, torch_dtype="auto", **kwargs)
+    model = AutoModelForCausalLM.from_pretrained(src, device_map={"": 0}, torch_dtype="auto", **kwargs)
     model.config.use_cache = False
     n_compressed = sum(1 for _, m in model.named_modules() if type(m).__name__ == "CompressedLinear")
     print(f"   CompressedLinear: {n_compressed}", flush=True)

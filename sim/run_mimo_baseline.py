@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 import os
+import random
 import re
 import threading
 import time
@@ -276,6 +277,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--first", type=int, default=15, help="первые N задач из списка сервера")
     ap.add_argument("--ids", nargs="*", default=None)
+    ap.add_argument("--shuffle-seed", type=int, default=None,
+                    help="перемешать список задач сервера этим зерном перед --first (одно и то же зерно = один порядок)")
     ap.add_argument("--workers", type=int, default=2, help="не больше --max-sessions сервера")
     ap.add_argument("--temperature", type=float, default=0.2)
     ap.add_argument("--max-tokens", type=int, default=8192)
@@ -308,7 +311,12 @@ def main():
     if args.clean_start:
         closed = MimoRemoteEnv(args.sandbox_url, args.token, task_ids=[])._http("POST", "/abort_all", {})
         print("закрыто брошенных сессий на сервере:", closed.get("result"), flush=True)
-    ids = args.ids or [t["instance_id"] for t in MimoRemoteEnv(args.sandbox_url, args.token).tasks][:args.first]
+    ids = args.ids
+    if not ids:
+        ids = [t["instance_id"] for t in MimoRemoteEnv(args.sandbox_url, args.token).tasks]
+        if args.shuffle_seed is not None:   # список сервера отсортирован: без перемешивания --first берёт соседние репозитории
+            random.Random(args.shuffle_seed).shuffle(ids)
+        ids = ids[:args.first]
     path = os.path.join(args.out, "results.jsonl")
     done = done_ids(path)
     todo = [(i, r) for r in range(args.repeats) for i in ids if (i, r) not in done]   # сначала все задачи, потом повторы

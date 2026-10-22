@@ -109,3 +109,18 @@ def test_build_end_to_end_turn_mode(tmp_path):
     assert len(avail) == 4 and len(train_tasks) == 3 and len(held_tasks) == 1
     assert records and all(r["target"] == "last" for r in records)
     assert len(records) <= 3 * 3
+
+
+def test_excluded_tasks_never_reach_train_or_heldout_sets(tmp_path):
+    run = tmp_path / "run"
+    (run / "messages").mkdir(parents=True)
+    rows = []
+    for i in range(4):
+        rows.append(row(f"repo_{i}"))
+        (run / "messages" / f"repo_{i}.json").write_text(json.dumps(dialog()), encoding="utf-8")
+    (run / "results.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    records, train_tasks, held_tasks, rejected, avail = build([str(run)], "SYS", per_task=1, holdout_frac=0.25,
+                                                              turns=3, exclude={"repo_0", "repo_2"})
+    assert sorted(avail) == ["repo_1", "repo_3"]
+    assert not ({"repo_0", "repo_2"} & (set(train_tasks) | set(held_tasks)))
+    assert build([str(run)], "SYS", turns=3, exclude=None)[4].keys() == {f"repo_{i}" for i in range(4)}

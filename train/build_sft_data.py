@@ -134,14 +134,18 @@ def split_tasks(task_ids, holdout_frac):
     return set(ordered[n_hold:]), set(ordered[:n_hold])      # (обучающие, отложенные)
 
 
-def build(runs, system, per_task=3, holdout_frac=0.3, turns=0, max_thought_chars=3000):
+def build(runs, system, per_task=3, holdout_frac=0.3, turns=0, max_thought_chars=3000, exclude=None):
     """turns=0: по примеру на весь эпизод (рассуждений нет). turns>0: по примеру на каждый из `turns`
-    выбранных ходов эпизода, с рассуждением модели в цели обучения."""
+    выбранных ходов эпизода, с рассуждением модели в цели обучения. exclude: идентификаторы задач,
+    которые не берём вовсе (оценочные задачи: иначе замер адаптера пересечётся с обучением)."""
     tools = [t for t in ROOT_TOOL_SCHEMAS if t["function"]["name"] in ALLOWED_TOOLS]
     rejected = Counter()
     by_task = defaultdict(list)
+    exclude = set(exclude or ())
     for run_dir in runs:
         for row, dialog in load_run(run_dir):
+            if row["instance_id"] in exclude:
+                continue
             reason = reject_reason(row, dialog, allow_compacted=bool(turns))
             if reason:
                 if row.get("passed"):
@@ -170,12 +174,22 @@ def main():
                     help="0: пример на весь эпизод; N>0: пример на каждый из N ходов с рассуждением")
     ap.add_argument("--max-thought-chars", type=int, default=3000,
                     help="ходы с более длинным рассуждением пропускаются (учим коротко думать)")
+    ap.add_argument("--exclude", nargs="*", default=[], help="идентификаторы задач, которых не должно быть в обучении")
+    ap.add_argument("--exclude-from", nargs="*", default=[],
+                    help="JSON-файлы со списком идентификаторов или словарём {имя: [идентификаторы]} (например eval_ids.json)")
     args = ap.parse_args()
     with open(args.system, encoding="utf-8") as f:
         system = f.read()
+    exclude = set(args.exclude)
+    for path in args.exclude_from:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        exclude.update(data if isinstance(data, list) else [i for v in data.values() for i in v])
     records, train_tasks, held_tasks, rejected, avail = build(args.runs, system, args.per_task,
                                                               args.holdout_frac, args.turns,
-                                                              args.max_thought_chars)
+                                                              args.max_thought_chars, exclude)
+    if exclude:
+        print(f"исключено задач: {len(exclude)}")
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for rec in records:

@@ -62,13 +62,16 @@ def reject_reason(row, dialog, allow_compacted=False):
         return "compacted"
     messages = dialog.get("messages") or []
     called = []
-    for m in messages:
+    last = max((k for k, m in enumerate(messages) if m.get("role") == "assistant"), default=-1)
+    for k, m in enumerate(messages):
         if m.get("role") != "assistant":
             continue
         if len(m.get("content") or "") > MAX_ASSISTANT_TEXT:
             return "runaway_text"
         calls = m.get("tool_calls") or []
         if not calls:
+            if k == last:          # итоговый ответ после submit_patch (промпт коллеги требует `Done.`)
+                continue
             return "turn_without_call"
         for tc in calls:
             fn = tc.get("function") or {}

@@ -77,6 +77,14 @@ def test_garbled_tool_names_and_runaway_text_are_rejected():
     assert reject_reason(row("t"), d) == "runaway_text"
 
 
+def test_final_plain_answer_after_submit_is_allowed_but_not_in_the_middle():
+    d = dialog()
+    d["messages"] += [{"role": "assistant", "content": "Done."}]       # промпт коллеги: «Done.» после сдачи
+    assert reject_reason(row("t"), d) is None
+    d["messages"].insert(1, {"role": "assistant", "content": "thinking out loud"})
+    assert reject_reason(row("t"), d) == "turn_without_call"
+
+
 def test_holdout_split_is_deterministic_and_disjoint():
     tasks = [f"task_{i}" for i in range(10)]
     a, b = split_tasks(tasks, 0.3)

@@ -32,7 +32,13 @@ IMAGES = {
     "Textualize/rich": "swebench-rich:latest",
     "psf/requests": "swebench-requests:latest",
 }
+# синтетические задачи (synth/build.py): чистый Python без зависимостей, нужны только python, pytest и git
+SYNTH_IMAGE = "swebench-requests:latest"
 WORKDIR = "/workspace"
+
+
+def image_for(repo):
+    return IMAGES.get(repo) or (SYNTH_IMAGE if repo.startswith("synth/") else None)
 PYTEST_FLAGS = "-p no:anyio -o timeout=0 -o python_classes='Test* *Test' -q"
 
 
@@ -45,7 +51,7 @@ def load_comp_tasks(comp_dir, valid_json=None):
     with open(os.path.join(comp_dir, "tasks.jsonl"), encoding="utf-8") as f:
         for line in f:
             t = json.loads(line)
-            if t["repo"] in IMAGES and (allowed is None or t["instance_id"] in allowed):
+            if image_for(t["repo"]) and (allowed is None or t["instance_id"] in allowed):
                 tasks[t["instance_id"]] = t
     return tasks
 
@@ -63,7 +69,7 @@ class CompSession(MimoSession):
 
     def __init__(self, task, runner, budget=None, mem="4g", cpus=2.0, comp_dir=".", graphs=True):
         super().__init__(task, runner, budget, mem, cpus)
-        self.image = IMAGES[task["repo"]]
+        self.image = image_for(task["repo"])
         self.comp_dir = os.path.abspath(comp_dir)
         self._graph_ctx = self._load_graph(graphs)
 

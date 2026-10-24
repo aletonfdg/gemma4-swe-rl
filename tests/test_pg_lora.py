@@ -1,6 +1,6 @@
 import json
 
-from train.pg_lora import broken_reason, build_records, episode_reward, group_advantages
+from train.pg_lora import broken_reason, build_records, drop_oldest_turns, episode_reward, group_advantages
 
 
 def call(name, **args):
@@ -48,6 +48,19 @@ def test_group_advantages_sign_and_no_spread():
     assert adv[0] > 0 and all(a < 0 for a in adv[1:]) and abs(sum(adv)) < 1e-9
     assert group_advantages([0.0, 0.0, 0.0]) == [0.0, 0.0, 0.0]
     assert group_advantages([1.0]) == [0.0]
+
+
+def test_drop_oldest_turns_keeps_task_and_target():
+    msgs = [{"role": "system", "content": "SYS"}] + episode()["messages"]   # read, edit, submit
+    target = msgs[-2]                                                       # ход submit_patch как цель
+    msgs = msgs[:-1]
+    assert drop_oldest_turns(msgs, 0) == msgs
+    one = drop_oldest_turns(msgs, 1)
+    assert one[:2] == msgs[:2] and one[-1] is target
+    names = [m["tool_calls"][0]["function"]["name"] for m in one if m.get("tool_calls")]
+    assert names == ["edit_file", "submit_patch"]                           # read_file с ответом ушёл
+    assert [m["role"] for m in drop_oldest_turns(msgs, 2)] == ["system", "user", "assistant"]
+    assert drop_oldest_turns(msgs, 3) is None
 
 
 def test_broken_episode_is_detected():

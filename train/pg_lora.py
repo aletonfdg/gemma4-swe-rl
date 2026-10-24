@@ -120,6 +120,27 @@ def build_records(runs, system, exclude=(), turns=6, max_thought_chars=6000, min
     return records, stats
 
 
+def drop_oldest_turns(messages, n):
+    """Убрать n самых старых ходов (ассистент + ответы инструментов) между условием задачи и целью.
+    Условие (system/user в начале) и последний ход-цель остаются: длинные поздние ходы иначе не влезают
+    в --max-len, а именно там видно, где модель застревает. None, если столько ходов убрать нельзя."""
+    start = next((k + 1 for k, m in enumerate(messages) if m.get("role") == "user"), None)
+    if start is None:
+        return None
+    body, target = messages[start:-1], messages[-1]
+    blocks, cur = [], []
+    for m in body:
+        if m.get("role") == "assistant" and cur:
+            blocks.append(cur)
+            cur = []
+        cur.append(m)
+    if cur:
+        blocks.append(cur)
+    if n > len(blocks):
+        return None
+    return messages[:start] + [m for b in blocks[n:] for m in b] + [target]
+
+
 def split_by_task(records, eval_frac):
     from train.pref_lora import split_by_task as split
     return split(records, eval_frac)
@@ -133,15 +154,25 @@ def train(args, records):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     model, tokenizer = load_model(args.r, args.alpha_lora, args.dropout, args.decompress)
-    rows, too_long = [], 0
+    rows, too_long, truncated = [], 0, 0
     for rec in records:
-        ex = build_example(rec["messages"], tokenizer, rec["tools"], args.max_len, thinking=True, target="last")
+        ex, drop = None, 0
+        while ex is None:
+            msgs = drop_oldest_turns(rec["messages"], drop)
+            if msgs is None:
+                break
+            ex = build_example(msgs, tokenizer, rec["tools"], args.max_len, thinking=True, target="last")
+            drop += 1
         if ex is None:
             too_long += 1
             continue
+        truncated += drop > 1
         rows.append({"ex": ex, "adv": rec["adv"], "task": rec["task"]})
     train_rows, eval_rows = split_by_task(rows, args.eval_frac)
-    print(f"   ходов: обучение {len(train_rows)}, оценка {len(eval_rows)}, отброшено длинных {too_long}", flush=True)
+    print(f"   ходов: обучение {len(train_rows)}, оценка {len(eval_rows)}, с обрезанной историей {truncated}, "
+          f"отброшено длинных {too_long}", flush=True)
+    # та же метрика на части обучающих ходов: отличает «не учится» от «учится, но не обобщает»
+    train_probe = random.Random(args.seed).sample(train_rows, min(len(train_rows), max(len(eval_rows), 64)))
     if len(train_rows) < 4:
         raise RuntimeError("слишком мало ходов для обучения")
     params = [p for p in model.parameters() if p.requires_grad]
@@ -165,12 +196,12 @@ def train(args, records):
             lp = token_logprobs(model, ids, mask)
         return lp, m, n, ids, mask
 
-    def evaluate():
+    def evaluate(sample):
         # средний logp хода у удачных минус у неудачных попыток: должен расти
         model.eval()
         pos, neg = [], []
         with torch.no_grad():
-            for row in eval_rows:
+            for row in sample:
                 lp, m, n, _, _ = mean_logp(row, grad=False)
                 (pos if row["adv"] > 0 else neg).append(((lp * m).sum() / n).item())
         model.train()
@@ -178,8 +209,12 @@ def train(args, records):
             return float("nan")
         return sum(pos) / len(pos) - sum(neg) / len(neg)
 
-    print(f"   шагов оптимизатора {total}; eval до обучения: разность logp удачных и неудачных {evaluate():.4f}",
-          flush=True)
+    def report(label):
+        print(f"   {label}: разность logp удачных и неудачных -- отложенные задачи {evaluate(eval_rows):.4f}, "
+              f"обучающие {evaluate(train_probe):.4f}", flush=True)
+
+    print(f"   шагов оптимизатора {total}", flush=True)
+    report("eval до обучения")
     model.train()
     step, micro, run_pg, run_kl = 0, 0, 0.0, 0.0
     for epoch in range(args.epochs):
@@ -210,7 +245,7 @@ def train(args, records):
                       f"kl {run_kl / args.log_every:.5f} lr {sched.get_last_lr()[0]:.2e}", flush=True)
                 run_pg = run_kl = 0.0
                 print_vram(f"шаг {step}")
-    print(f"   eval в конце: разность logp удачных и неудачных {evaluate():.4f}", flush=True)
+        report(f"eval после эпохи {epoch}")
     save_lora(model, Path(args.out) / args.name, args.r, args.alpha_lora, args.dropout)
 
 
@@ -232,8 +267,8 @@ def main():
     ap.add_argument("--r", type=int, default=32)
     ap.add_argument("--alpha-lora", type=float, default=64)
     ap.add_argument("--dropout", type=float, default=0.0)
-    ap.add_argument("--lr", type=float, default=2e-5)
-    ap.add_argument("--epochs", type=int, default=1)
+    ap.add_argument("--lr", type=float, default=5e-5, help="2e-5 в первом раунде почти не сдвинуло модель")
+    ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--max-grad-norm", type=float, default=0.3)
     ap.add_argument("--max-len", type=int, default=8192)

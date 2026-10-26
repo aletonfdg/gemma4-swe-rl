@@ -1,0 +1,358 @@
+{
+ "name": "mimo50",
+ "description": "Фиксированный проверочный набор: 50 задач MiMo из разных проектов (не fastapi/rich/requests). Отобраны из прогона mimo_p1_full (адаптер pref_edit_v1, 1 попытка): 14 решённых, 24 tests_failed, 12 no_patch; один проект -- одна задача, где хватило; при равенстве -- образы меньше (быстрее старт). Набор не менять: только тогда замеры разных версий сравнимы.",
+ "ids": [
+  "format-code-task-000409",
+  "format-code-task-002096",
+  "format-code-task-002051",
+  "format-code-task-002230",
+  "format-code-task-001251",
+  "format-code-task-002209",
+  "format-code-task-002773",
+  "format-code-task-000795",
+  "format-code-task-002410",
+  "format-code-task-002758",
+  "format-code-task-000732",
+  "format-code-task-001853",
+  "format-code-task-002975",
+  "format-code-task-002206",
+  "format-code-task-000472",
+  "format-code-task-000019",
+  "format-code-task-002366",
+  "format-code-task-002724",
+  "format-code-task-001499",
+  "format-code-task-000239",
+  "format-code-task-002401",
+  "format-code-task-002614",
+  "format-code-task-002725",
+  "format-code-task-000814",
+  "format-code-task-000310",
+  "format-code-task-002736",
+  "format-code-task-002468",
+  "format-code-task-002380",
+  "format-code-task-001946",
+  "format-code-task-001948",
+  "format-code-task-000466",
+  "format-code-task-002872",
+  "format-code-task-002042",
+  "format-code-task-000497",
+  "format-code-task-002087",
+  "format-code-task-001422",
+  "format-code-task-000275",
+  "format-code-task-001695",
+  "format-code-task-000049",
+  "format-code-task-002722",
+  "format-code-task-000823",
+  "format-code-task-000812",
+  "format-code-task-001612",
+  "format-code-task-002283",
+  "format-code-task-002292",
+  "format-code-task-001797",
+  "format-code-task-000158",
+  "format-code-task-000905",
+  "format-code-task-001587",
+  "format-code-task-000411"
+ ],
+ "meta": [
+  {
+   "id": "format-code-task-000409",
+   "pkg": "google",
+   "reason": "tests_passed",
+   "start_s": 2
+  },
+  {
+   "id": "format-code-task-002096",
+   "pkg": "requests",
+   "reason": "tests_passed",
+   "start_s": 52
+  },
+  {
+   "id": "format-code-task-002051",
+   "pkg": "nilearn",
+   "reason": "tests_passed",
+   "start_s": 83
+  },
+  {
+   "id": "format-code-task-002230",
+   "pkg": "pandas",
+   "reason": "tests_passed",
+   "start_s": 108
+  },
+  {
+   "id": "format-code-task-001251",
+   "pkg": "geopandas",
+   "reason": "tests_passed",
+   "start_s": 113
+  },
+  {
+   "id": "format-code-task-002209",
+   "pkg": "fastparquet",
+   "reason": "tests_passed",
+   "start_s": 148
+  },
+  {
+   "id": "format-code-task-002773",
+   "pkg": "sunpy",
+   "reason": "tests_passed",
+   "start_s": 174
+  },
+  {
+   "id": "format-code-task-000795",
+   "pkg": "titiler",
+   "reason": "tests_passed",
+   "start_s": 247
+  },
+  {
+   "id": "format-code-task-002410",
+   "pkg": "?format-code-task-002410",
+   "reason": "tests_passed",
+   "start_s": 284
+  },
+  {
+   "id": "format-code-task-002758",
+   "pkg": "streamlink",
+   "reason": "tests_passed",
+   "start_s": 348
+  },
+  {
+   "id": "format-code-task-000732",
+   "pkg": "pygdbmi",
+   "reason": "tests_passed",
+   "start_s": 482
+  },
+  {
+   "id": "format-code-task-001853",
+   "pkg": "marimo",
+   "reason": "tests_passed",
+   "start_s": 696
+  },
+  {
+   "id": "format-code-task-002975",
+   "pkg": "vyper",
+   "reason": "tests_passed",
+   "start_s": 882
+  },
+  {
+   "id": "format-code-task-002206",
+   "pkg": "pandas",
+   "reason": "tests_passed",
+   "start_s": 231
+  },
+  {
+   "id": "format-code-task-000472",
+   "pkg": "specutils",
+   "reason": "tests_failed",
+   "start_s": 2
+  },
+  {
+   "id": "format-code-task-000019",
+   "pkg": "covalent_ui",
+   "reason": "tests_failed",
+   "start_s": 3
+  },
+  {
+   "id": "format-code-task-002366",
+   "pkg": "pvlib",
+   "reason": "tests_failed",
+   "start_s": 3
+  },
+  {
+   "id": "format-code-task-002724",
+   "pkg": "sqlfluff",
+   "reason": "tests_failed",
+   "start_s": 6
+  },
+  {
+   "id": "format-code-task-001499",
+   "pkg": "?format-code-task-001499",
+   "reason": "tests_failed",
+   "start_s": 13
+  },
+  {
+   "id": "format-code-task-000239",
+   "pkg": "SALib",
+   "reason": "tests_failed",
+   "start_s": 41
+  },
+  {
+   "id": "format-code-task-002401",
+   "pkg": "?format-code-task-002401",
+   "reason": "tests_failed",
+   "start_s": 47
+  },
+  {
+   "id": "format-code-task-002614",
+   "pkg": "anndata",
+   "reason": "tests_failed",
+   "start_s": 57
+  },
+  {
+   "id": "format-code-task-002725",
+   "pkg": "?format-code-task-002725",
+   "reason": "tests_failed",
+   "start_s": 60
+  },
+  {
+   "id": "format-code-task-000814",
+   "pkg": "click",
+   "reason": "tests_failed",
+   "start_s": 61
+  },
+  {
+   "id": "format-code-task-000310",
+   "pkg": "?format-code-task-000310",
+   "reason": "tests_failed",
+   "start_s": 64
+  },
+  {
+   "id": "format-code-task-002736",
+   "pkg": "statsmodels",
+   "reason": "tests_failed",
+   "start_s": 65
+  },
+  {
+   "id": "format-code-task-002468",
+   "pkg": "pyanalyze",
+   "reason": "tests_failed",
+   "start_s": 72
+  },
+  {
+   "id": "format-code-task-002380",
+   "pkg": "?format-code-task-002380",
+   "reason": "tests_failed",
+   "start_s": 72
+  },
+  {
+   "id": "format-code-task-001946",
+   "pkg": "sklearn",
+   "reason": "tests_failed",
+   "start_s": 78
+  },
+  {
+   "id": "format-code-task-001948",
+   "pkg": "mne",
+   "reason": "tests_failed",
+   "start_s": 78
+  },
+  {
+   "id": "format-code-task-000466",
+   "pkg": "?format-code-task-000466",
+   "reason": "tests_failed",
+   "start_s": 82
+  },
+  {
+   "id": "format-code-task-002872",
+   "pkg": "?format-code-task-002872",
+   "reason": "tests_failed",
+   "start_s": 83
+  },
+  {
+   "id": "format-code-task-002042",
+   "pkg": "?format-code-task-002042",
+   "reason": "tests_failed",
+   "start_s": 85
+  },
+  {
+   "id": "format-code-task-000497",
+   "pkg": "aws_lambda_powertools",
+   "reason": "tests_failed",
+   "start_s": 90
+  },
+  {
+   "id": "format-code-task-002087",
+   "pkg": "obspy",
+   "reason": "tests_failed",
+   "start_s": 90
+  },
+  {
+   "id": "format-code-task-001422",
+   "pkg": "h5py",
+   "reason": "tests_failed",
+   "start_s": 91
+  },
+  {
+   "id": "format-code-task-000275",
+   "pkg": "unstructured_client",
+   "reason": "tests_failed",
+   "start_s": 92
+  },
+  {
+   "id": "format-code-task-001695",
+   "pkg": "skfem",
+   "reason": "tests_failed",
+   "start_s": 98
+  },
+  {
+   "id": "format-code-task-000049",
+   "pkg": "flocker",
+   "reason": "no_patch",
+   "start_s": 2
+  },
+  {
+   "id": "format-code-task-002722",
+   "pkg": "?format-code-task-002722",
+   "reason": "no_patch",
+   "start_s": 60
+  },
+  {
+   "id": "format-code-task-000823",
+   "pkg": "compose",
+   "reason": "no_patch",
+   "start_s": 79
+  },
+  {
+   "id": "format-code-task-000812",
+   "pkg": "?format-code-task-000812",
+   "reason": "no_patch",
+   "start_s": 84
+  },
+  {
+   "id": "format-code-task-001612",
+   "pkg": "?format-code-task-001612",
+   "reason": "no_patch",
+   "start_s": 89
+  },
+  {
+   "id": "format-code-task-002283",
+   "pkg": "smart_open",
+   "reason": "no_patch",
+   "start_s": 91
+  },
+  {
+   "id": "format-code-task-002292",
+   "pkg": "plotly",
+   "reason": "no_patch",
+   "start_s": 98
+  },
+  {
+   "id": "format-code-task-001797",
+   "pkg": "configparser",
+   "reason": "no_patch",
+   "start_s": 100
+  },
+  {
+   "id": "format-code-task-000158",
+   "pkg": "?format-code-task-000158",
+   "reason": "no_patch",
+   "start_s": 104
+  },
+  {
+   "id": "format-code-task-000905",
+   "pkg": "?format-code-task-000905",
+   "reason": "no_patch",
+   "start_s": 114
+  },
+  {
+   "id": "format-code-task-001587",
+   "pkg": "irrd",
+   "reason": "no_patch",
+   "start_s": 119
+  },
+  {
+   "id": "format-code-task-000411",
+   "pkg": "airflow",
+   "reason": "no_patch",
+   "start_s": 139
+  }
+ ]
+}

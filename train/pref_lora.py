@@ -41,6 +41,32 @@ def split_by_task(rows, eval_frac):
     return [r for r in rows if r["task"] not in held], [r for r in rows if r["task"] in held]
 
 
+def parse_repeat(specs):
+    """["real_fix=2", "synthetic=2"] -> {"real_fix": 2, "synthetic": 2}."""
+    out = {}
+    for spec in specs or []:
+        kind, _, n = spec.partition("=")
+        if not kind or not n.isdigit() or int(n) < 1:
+            raise ValueError(f"--repeat ждёт ВИД=N, а не {spec!r}")
+        out[kind] = int(n)
+    return out
+
+
+def repeat_kinds(rows, repeat):
+    """Пары указанных видов -- N раз за эпоху (после разбиения: в оценку копии не попадают)."""
+    return [row for row in rows for _ in range(repeat.get(row["kind"], 1))]
+
+
+def eval_summary(margins):
+    """[(kind, margin)] -> {kind: (n, доля margin>0, средний margin)} по видам и "все"; пусто -> {}."""
+    groups = {}
+    for kind, m in margins:
+        groups.setdefault(kind, []).append(m)
+    if len(groups) > 1:
+        groups["все"] = [m for _, m in margins]
+    return {k: (len(v), sum(m > 0 for m in v) / len(v), sum(v) / len(v)) for k, v in groups.items()}
+
+
 def load_pairs(path, tokenizer, max_len):
     from train.manual_lora_qat import build_example
     rows, stats = [], Counter()
@@ -66,11 +92,13 @@ def train(args):
     from rl.logprobs import token_logprobs
     from train.manual_lora_qat import load_model, lora_disabled, print_vram, save_lora
 
+    repeat = parse_repeat(args.repeat)          # до загрузки модели: ошибка в аргументе всплывает сразу
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     model, tokenizer = load_model(args.r, args.alpha_lora, args.dropout, args.decompress)
     rows = load_pairs(args.data, tokenizer, args.max_len)
     train_rows, eval_rows = split_by_task(rows, args.eval_frac)
+    train_rows = repeat_kinds(train_rows, repeat)
     if len(train_rows) < 4:
         raise RuntimeError("слишком мало пар для обучения")
     params = [p for p in model.parameters() if p.requires_grad]
@@ -101,20 +129,19 @@ def train(args):
         model.train()
         print(f"   reference посчитан для {len(rows)} пар", flush=True)
 
-    def evaluate():
+    def evaluate(title):
         model.eval()
         margins = []
         with torch.no_grad():
             for row in eval_rows:
-                margins.append((logp_sum(row["c"]) - logp_sum(row["r"])).item() - row.get("ref", 0.0))
+                margins.append((row["kind"], (logp_sum(row["c"]) - logp_sum(row["r"])).item() - row.get("ref", 0.0)))
         model.train()
-        if not margins:
-            return float("nan"), float("nan")
-        return sum(m > 0 for m in margins) / len(margins), sum(margins) / len(margins)
+        for kind, (n, acc, margin) in eval_summary(margins).items():
+            print(f"   eval {title} [{kind}, {n} пар]: доля пар chosen>rejected {acc:.2f}, "
+                  f"средняя разность logp {margin:.2f}", flush=True)
 
-    print(f"   train {len(train_rows)} пар, eval {len(eval_rows)}, шагов оптимизатора {total}", flush=True)
-    acc, margin = evaluate()
-    print(f"   eval до обучения: доля пар chosen>rejected {acc:.2f}, средняя разность logp {margin:.2f}", flush=True)
+    print(f"   train {len(train_rows)} пар (с повторами), eval {len(eval_rows)}, шагов оптимизатора {total}", flush=True)
+    evaluate("до обучения")
     model.train()
     step, micro, run_loss, run_z = 0, 0, 0.0, 0.0
     for epoch in range(args.epochs):
@@ -143,8 +170,7 @@ def train(args):
                       f"z {run_z / args.log_every:.3f} lr {sched.get_last_lr()[0]:.2e}", flush=True)
                 run_loss = run_z = 0.0
                 print_vram(f"шаг {step}")
-    acc, margin = evaluate()
-    print(f"   eval в конце: доля пар chosen>rejected {acc:.2f}, средняя разность logp {margin:.2f}", flush=True)
+    evaluate("в конце")
     save_lora(model, Path(args.out) / args.name, args.r, args.alpha_lora, args.dropout)
 
 
@@ -168,6 +194,8 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--decompress", action="store_true")
     ap.add_argument("--ref", action="store_true", help="DPO с reference-моделью (выключенная LoRA)")
+    ap.add_argument("--repeat", nargs="*", default=[],
+                    help="ВИД=N: пары этого вида N раз за эпоху, например real_fix=2 synthetic=2")
     train(ap.parse_args())
 
 

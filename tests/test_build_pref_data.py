@@ -82,3 +82,24 @@ def test_trim_history_keeps_task_and_last_exchanges_and_cuts_long_tool_output():
     assert all(len(m["content"]) < 40 for m in out if m["role"] == "tool")
     assert msgs[2]["content"] == "x" * 100                         # исходные сообщения не меняем
     assert trim_history(msgs[:1], 2, 10) == msgs[:1]
+
+
+def test_repeat_only_named_kinds_and_reject_bad_spec():
+    from train.pref_lora import parse_repeat, repeat_kinds
+    rows = [{"kind": "real_fix"}, {"kind": "short_think"}, {"kind": "synthetic"}]
+    out = repeat_kinds(rows, parse_repeat(["real_fix=2", "synthetic=2"]))
+    assert [r["kind"] for r in out] == ["real_fix", "real_fix", "short_think", "synthetic", "synthetic"]
+    for bad in (["real_fix"], ["real_fix=0"], ["=2"]):
+        try:
+            parse_repeat(bad)
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+
+
+def test_eval_summary_reports_each_kind_and_total():
+    from train.pref_lora import eval_summary
+    out = eval_summary([("real_fix", 2.0), ("real_fix", -1.0), ("short_think", 3.0)])
+    assert out["real_fix"] == (2, 0.5, 0.5) and out["short_think"] == (1, 1.0, 3.0)
+    assert out["все"] == (3, 2 / 3, 4 / 3)
+    assert eval_summary([("real_fix", 1.0)]) == {"real_fix": (1, 1.0, 1.0)} and eval_summary([]) == {}

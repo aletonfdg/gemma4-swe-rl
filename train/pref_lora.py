@@ -124,8 +124,10 @@ def train(args):
     if args.ref:
         model.eval()
         with torch.no_grad(), lora_disabled(model):
-            for row in rows:
+            for i, row in enumerate(rows, 1):
                 row["ref"] = (logp_sum(row["c"]) - logp_sum(row["r"])).item()
+                if i % 50 == 0:
+                    print(f"   reference: {i}/{len(rows)}", flush=True)
         model.train()
         print(f"   reference посчитан для {len(rows)} пар", flush=True)
 

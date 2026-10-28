@@ -10,6 +10,11 @@ z = beta*(logp(c) - logp(r)). Поэтому вес считаем без гра
 отдельных прохода вперёд-назад: цепочки вычислений не держатся одновременно, и потолок длины тот же
 (8192 токена), что у SFT. Dropout по умолчанию 0: проход без градиента должен совпадать с обучающим.
 
+С --ref -- обычный DPO: из разности вычитается та же разность у reference-модели (та же модель с
+выключенной LoRA, считается один раз до обучения). Нужно для пар, где chosen и rejected различаются
+длиной рассуждения (build_pref_short): без reference длинный вариант проигрывает уже из-за числа токенов,
+pref-loss с первого шага около нуля и ничему не учит.
+
 Запуск (Colab, A100 80 ГБ, vLLM выключен):
   python -m train.pref_lora --data data/pref_edit.jsonl --name pref_edit_v1 --decompress --epochs 2
 """
@@ -59,7 +64,7 @@ def load_pairs(path, tokenizer, max_len):
 def train(args):
     import torch
     from rl.logprobs import token_logprobs
-    from train.manual_lora_qat import load_model, print_vram, save_lora
+    from train.manual_lora_qat import load_model, lora_disabled, print_vram, save_lora
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -88,12 +93,20 @@ def train(args):
         lp = token_logprobs(model, ids, mask)
         return (lp * mask[:, 1:].float()).sum()
 
+    if args.ref:
+        model.eval()
+        with torch.no_grad(), lora_disabled(model):
+            for row in rows:
+                row["ref"] = (logp_sum(row["c"]) - logp_sum(row["r"])).item()
+        model.train()
+        print(f"   reference посчитан для {len(rows)} пар", flush=True)
+
     def evaluate():
         model.eval()
         margins = []
         with torch.no_grad():
             for row in eval_rows:
-                margins.append((logp_sum(row["c"]) - logp_sum(row["r"])).item())
+                margins.append((logp_sum(row["c"]) - logp_sum(row["r"])).item() - row.get("ref", 0.0))
         model.train()
         if not margins:
             return float("nan"), float("nan")
@@ -108,7 +121,8 @@ def train(args):
         random.shuffle(train_rows)
         for row in train_rows:
             with torch.no_grad():
-                w, z = pref_weight(logp_sum(row["c"]).item(), logp_sum(row["r"]).item(), args.beta)
+                w, z = pref_weight(logp_sum(row["c"]).item() - row.get("ref", 0.0), logp_sum(row["r"]).item(),
+                                   args.beta)
             n_tok = max(1, sum(row["c"]["mask"]))
             lp_c = logp_sum(row["c"])
             (-(w + args.sft_weight / n_tok) * lp_c / args.grad_accum).backward()
@@ -153,6 +167,7 @@ def main():
     ap.add_argument("--log-every", type=int, default=2)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--decompress", action="store_true")
+    ap.add_argument("--ref", action="store_true", help="DPO с reference-моделью (выключенная LoRA)")
     train(ap.parse_args())
 
 

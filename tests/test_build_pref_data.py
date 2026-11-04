@@ -55,6 +55,31 @@ def test_build_makes_pairs_differing_only_in_the_last_call(tmp_path):
     assert build([str(run)], "SYS", exclude={"t"})[0] == []         # исключённые задачи не берём
 
 
+FILE = 'def g():\n    raise E(detail="Not authenticated")\n    return "a\\n"\n'
+
+
+def test_v2_fixes_escaped_quotes_only_when_the_fix_is_in_the_file():
+    from train.build_pref_data import BS, make_pair_v2
+    bad_old = '    raise E(detail=' + BS + '"Not authenticated' + BS + '")'
+    bad = {"filepath": "a.py", "old_string": bad_old, "new_string": bad_old.replace("E(", "F(")}
+    kind, defect, good, rejected = make_pair_v2(bad, ok=False, seen=[FILE])
+    assert (kind, defect) == ("real_fix", "quote") and rejected == bad
+    assert good["old_string"] in FILE and BS + '"' not in good["new_string"]
+    assert make_pair_v2(bad, ok=False, seen=["other text"]) is None      # файл не видели -- не гадаем
+    legit = {"filepath": "a.py", "old_string": '    return "a\\n"', "new_string": '    return "b\\n"'}
+    assert make_pair_v2(legit, ok=False, seen=[FILE]) is None              # old_string и так есть в файле
+
+
+def test_v2_newline_and_quote_together_and_synthetic_quote():
+    from train.build_pref_data import BS, make_pair_v2
+    both = 'def g():' + BS + 'n    raise E(detail=' + BS + '"Not authenticated' + BS + '")'
+    kind, defect, good, _ = make_pair_v2({"filepath": "a.py", "old_string": both, "new_string": "x"}, False, [FILE])
+    assert kind == "real_fix" and good["old_string"] in FILE and set(defect.split("+")) >= {"newline", "quote"}
+    ok = {"filepath": "a.py", "old_string": 'detail="Not authenticated"', "new_string": 'detail="No"'}
+    kind, defect, chosen, rejected = make_pair_v2(ok, ok=True, seen=[FILE])
+    assert (kind, defect) == ("synthetic", "quote") and chosen == ok and BS + '"' in rejected["old_string"]
+
+
 def test_pref_weight_is_half_beta_at_zero_margin_and_shrinks_with_margin():
     w0, z0 = pref_weight(-10.0, -10.0, 0.1)
     assert abs(w0 - 0.05) < 1e-9 and z0 == 0.0

@@ -15,6 +15,10 @@ write_file того же дефекта нет. Награда проверяе�
 Запуск:
   python -m train.build_pref_data --runs results/traj_think --system submission_v3/prompts/system.md \
       --out data/pref_edit.jsonl --exclude fastapi_14303 ...
+v2 (--v2): все виды лишнего экранирования (\\n, \\", \\t, \\\\); chosen real_fix принимается, только если его
+old_string дословно есть в тексте файла, который модель видела раньше в эпизоде (см. make_pair_v2):
+  python -m train.build_pref_data --v2 --runs <логи> --system submission_v5/prompts/system.md \
+      --exclude-file eval/mimo50.json --out data/pref_edit_v2.jsonl
 """
 import argparse
 import copy
@@ -88,7 +92,7 @@ def tool_status(messages):
 
 
 def make_pair(args, ok):
-    """-> (kind, chosen_args, rejected_args) или None."""
+    """-> (kind, chosen_args, rejected_args) или None. Только литеральный \\n (данные pref_edit_v1)."""
     texts = {f: args.get(f) or "" for f in FIELDS}
     if any(is_escaped(t) for t in texts.values()):
         if ok:                                   # удачный вызов с литеральным \n -- не учим на нём
@@ -101,8 +105,84 @@ def make_pair(args, ok):
     return None
 
 
+# --- v2: все виды лишнего экранирования, исправление сверяется с текстом файла -------------------------
+# В pref_edit_v1 исправлялся только \n, а \" оставался: 23 из 87 chosen сами не применялись (detail=\"x\").
+# Модель экранирует old_string как строку JSON: \n, \", \t, \\. Обычный код тоже бывает с \n или \" внутри
+# строк, поэтому исправление принимаем, только если исправленный old_string дословно есть в тексте файла,
+# который модель видела раньше в этом эпизоде (read_file или вывод run_command), а исходный -- нет.
+BS = chr(92)
+UNESCAPES = {"newline": (BS + "n", "\n"), "tab": (BS + "t", "\t"), "quote": (BS + '"', '"'),
+             "squote": (BS + "'", "'")}
+
+
+def unescape(text, kinds):
+    """Снять экранирование выбранных видов; "backslash" (\\\\ -> \\) обрабатывается так, чтобы \\\\n не стал \\+перевод."""
+    out = text.replace(BS + BS, "\0") if "backslash" in kinds else text
+    for k in kinds:
+        if k in UNESCAPES:
+            out = out.replace(*UNESCAPES[k])
+    return out.replace("\0", BS) if "backslash" in kinds else out
+
+
+def fix_variants(text):
+    """Кандидаты исправления: по одному виду, newline+quote, затем все сразу -> [(kinds, fixed)]."""
+    present = [k for k, (esc, _) in UNESCAPES.items() if esc in text]
+    if BS + BS in text:
+        present.append("backslash")
+    variants = [(k,) for k in present]
+    if "quote" in present and "newline" in present:
+        variants.append(("newline", "quote"))
+    variants.append(tuple(present))
+    seen, out = set(), []
+    for kinds in variants:
+        fixed = unescape(text, kinds)
+        if fixed != text and fixed not in seen:
+            seen.add(fixed)
+            out.append((kinds, fixed))
+    return out
+
+
+def seen_texts(messages):
+    """Тексты файлов, которые модель видела: content у read_file, stdout у run_command."""
+    out = []
+    for m in messages:
+        if m.get("role") != "tool":
+            continue
+        try:
+            body = json.loads(m.get("content") or "{}")
+        except ValueError:
+            continue
+        if isinstance(body, dict):
+            out += [body[k] for k in ("content", "stdout") if isinstance(body.get(k), str)]
+    return out
+
+
+def escape_quotes(text):
+    return text.replace('"', BS + '"')
+
+
+def make_pair_v2(args, ok, seen):
+    """-> (kind, defect, chosen_args, rejected_args) или None."""
+    old, new = args.get("old_string") or "", args.get("new_string") or ""
+    if not ok:
+        if not old.strip() or any(old in t for t in seen):
+            return None                          # провал не из-за экранирования
+        for kinds, fixed_old in fix_variants(old):
+            if any(fixed_old in t for t in seen):
+                fixed = dict(args, old_string=fixed_old, new_string=unescape(new, kinds))
+                return "real_fix", "+".join(kinds), fixed, args
+        return None
+    if '"' in old and BS + '"' not in old + new:
+        broken = dict(args, old_string=escape_quotes(old), new_string=escape_quotes(new))
+        return "synthetic", "quote", args, broken
+    if "\n" in old + new and not any(is_escaped(t) for t in (old, new)):
+        broken = dict(args, old_string=escape_newlines(old), new_string=escape_newlines(new))
+        return "synthetic", "newline", args, broken
+    return None
+
+
 def episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars=MAX_THOUGHT_CHARS,
-                  keep_exchanges=3, max_tool_chars=3000):
+                  keep_exchanges=3, max_tool_chars=3000, v2=False):
     messages = dialog["messages"]
     status = tool_status(messages)
     pairs = []
@@ -114,18 +194,33 @@ def episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars=MAX_
         if args is None or not thought or len(thought) > max_thought_chars:
             continue
         ok = status.get(m["tool_calls"][0]["id"]) == "ok"
-        made = make_pair(args, ok)
-        if made is None:
-            continue
-        kind, good, bad = made
+        if v2:
+            made = make_pair_v2(args, ok, seen_texts(messages[:k]))
+            if made is None:
+                continue
+            kind, defect, good, bad = made
+        else:
+            made = make_pair(args, ok)
+            if made is None:
+                continue
+            (kind, good, bad), defect = made, "newline"
         prefix = [{"role": "system", "content": system}] + trim_history(messages[:k], keep_exchanges, max_tool_chars)
         pairs.append({"chosen": prefix + [with_args(m, good)], "rejected": prefix + [with_args(m, bad)],
-                      "tools": tools, "thinking": True, "kind": kind})
+                      "tools": tools, "thinking": True, "kind": kind, "defect": defect})
     return pairs
 
 
+def balance_synthetic(real, synthetic, per_real):
+    """v2: синтетических пар каждого вида (quote / newline) -- per_real на каждую реальную с этим дефектом."""
+    used = []
+    for d in ("quote", "newline"):
+        need = per_real * sum(d in p["defect"].split("+") for p in real)
+        used += [p for p in synthetic if p["defect"] == d][:need]
+    return used
+
+
 def build(runs, system, exclude=(), max_per_episode=20, synthetic_per_real=1, max_thought_chars=MAX_THOUGHT_CHARS,
-          keep_exchanges=3, max_tool_chars=3000):
+          keep_exchanges=3, max_tool_chars=3000, v2=False):
     """synthetic_per_real=0 -- брать все доступные синтетические пары."""
     tools = [t for t in ROOT_TOOL_SCHEMAS if t["function"]["name"] in ALLOWED_TOOLS]
     real, synthetic = [], []
@@ -134,12 +229,18 @@ def build(runs, system, exclude=(), max_per_episode=20, synthetic_per_real=1, ma
             if row["instance_id"] in exclude or row.get("error"):
                 continue
             for pair in episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars,
-                                       keep_exchanges, max_tool_chars):
+                                       keep_exchanges, max_tool_chars, v2):
                 pair["task"] = row["instance_id"]
                 (real if pair["kind"] == "real_fix" else synthetic).append(pair)
-    used = synthetic[:len(real) * synthetic_per_real] if synthetic_per_real else synthetic
-    return real + used, Counter({"real_fix": len(real), "synthetic_available": len(synthetic),
-                                 "synthetic_used": len(used)})
+    if not synthetic_per_real:
+        used = synthetic
+    elif v2:
+        used = balance_synthetic(real, synthetic, synthetic_per_real)
+    else:
+        used = synthetic[:len(real) * synthetic_per_real]
+    stats = Counter({"real_fix": len(real), "synthetic_available": len(synthetic), "synthetic_used": len(used)})
+    stats.update(f"{p['kind']}:{p['defect']}" for p in real + used)
+    return real + used, stats
 
 
 def main():
@@ -154,11 +255,18 @@ def main():
     ap.add_argument("--max-tool-chars", type=int, default=3000, help="длиннее ответы инструментов обрезаются")
     ap.add_argument("--synthetic-per-real", type=int, default=1,
                     help="синтетических пар на одну реальную (0 = все доступные)")
+    ap.add_argument("--v2", action="store_true",
+                    help="все виды лишнего экранирования (\\n, \\\", \\t, \\\\), исправление сверяется с текстом файла")
+    ap.add_argument("--exclude-file", default=None, help="json с {'ids': [...]}, например eval/mimo50.json")
     args = ap.parse_args()
     with open(args.system, encoding="utf-8") as f:
         system = f.read()
-    pairs, stats = build(args.runs, system, set(args.exclude), args.max_per_episode, args.synthetic_per_real,
-                         args.max_thought_chars, args.keep_exchanges, args.max_tool_chars)
+    exclude = set(args.exclude)
+    if args.exclude_file:
+        with open(args.exclude_file, encoding="utf-8") as f:
+            exclude |= set(json.load(f)["ids"])
+    pairs, stats = build(args.runs, system, exclude, args.max_per_episode, args.synthetic_per_real,
+                         args.max_thought_chars, args.keep_exchanges, args.max_tool_chars, args.v2)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for p in pairs:

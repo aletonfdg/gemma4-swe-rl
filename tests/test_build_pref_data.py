@@ -80,6 +80,31 @@ def test_v2_newline_and_quote_together_and_synthetic_quote():
     assert (kind, defect) == ("synthetic", "quote") and chosen == ok and BS + '"' in rejected["old_string"]
 
 
+def test_v2_tmp_write_becomes_heredoc_run_command(tmp_path):
+    import subprocess
+    import sys
+    from train.build_pref_data import heredoc_command
+    content = 'print("a")\nEOF\nx = 1'                         # строка EOF внутри -- маркер должен смениться
+    cmd = heredoc_command(str(tmp_path / "r.py").replace("\\", "/"), content)
+    assert cmd.startswith("cat > ") and "<<'EOF_'" in cmd
+    if sys.platform != "win32":
+        subprocess.run(["bash", "-c", cmd], check=True)
+        assert (tmp_path / "r.py").read_text() == content + "\n"
+    run = tmp_path / "run"
+    (run / "messages").mkdir(parents=True)
+    w = {"role": "assistant", "content": "", "thought": "write repro", "tool_calls": [{"id": "c1", "type": "function",
+         "function": {"name": "write_file", "arguments": json.dumps({"filepath": "/tmp/r.py", "content": content})}}]}
+    msgs = [{"role": "user", "content": "task"}, w, tool_msg("c1", "ok")]
+    (run / "messages" / "t.json").write_text(json.dumps({"messages": msgs}), encoding="utf-8")
+    (run / "results.jsonl").write_text(json.dumps({"instance_id": "t", "rep": 0, "passed": False}), encoding="utf-8")
+    pairs, stats = build([str(run)], "SYS", v2=True)
+    assert stats["real_fix:tmp_write"] == 1
+    c, r = pairs[0]["chosen"][-1], pairs[0]["rejected"][-1]
+    assert c["thought"] == r["thought"] and r["tool_calls"][0]["function"]["name"] == "write_file"
+    assert c["tool_calls"][0]["function"]["name"] == "run_command"
+    assert json.loads(c["tool_calls"][0]["function"]["arguments"])["command"].startswith("cat > /tmp/r.py <<'EOF_'")
+
+
 def test_pref_weight_is_half_beta_at_zero_margin_and_shrinks_with_margin():
     w0, z0 = pref_weight(-10.0, -10.0, 0.1)
     assert abs(w0 - 0.05) < 1e-9 and z0 == 0.0

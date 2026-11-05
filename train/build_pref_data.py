@@ -24,6 +24,7 @@ import argparse
 import copy
 import json
 import os
+import random
 from collections import Counter
 
 from sim.tool_schemas import ROOT_TOOL_SCHEMAS
@@ -181,6 +182,39 @@ def make_pair_v2(args, ok, seen):
     return None
 
 
+# Ловушка харнесса: write_file убирает ведущий "/" и пишет "/tmp/x.py" в /workspace/tmp/x.py, а run_command
+# работает с настоящим /tmp. Модель запускает старый файл, видит ложный результат и теряет время (база: 70%
+# эпизодов); файл к тому же попадает в патч. Правильно -- записать файл через run_command и heredoc.
+def tmp_write_args(message):
+    """Аргументы единственного write_file в /tmp или None."""
+    calls = message.get("tool_calls") or []
+    if len(calls) != 1 or calls[0]["function"]["name"] != "write_file":
+        return None
+    try:
+        args = json.loads(calls[0]["function"]["arguments"])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(args, dict) or not str(args.get("filepath", "")).startswith("/tmp/"):
+        return None
+    return args if isinstance(args.get("content"), str) and args["content"].strip() else None
+
+
+def heredoc_command(path, content):
+    """run_command, создающий файл с точно таким содержимым; маркер в кавычках -- без подстановок shell."""
+    tag = "EOF"
+    while any(line.strip() == tag for line in content.splitlines()):
+        tag += "_"
+    body = content if content.endswith("\n") else content + "\n"
+    return f"cat > {path} <<'{tag}'\n{body}{tag}"
+
+
+def as_run_command(message, command):
+    out = copy.deepcopy(message)
+    fn = out["tool_calls"][0]["function"]
+    fn["name"], fn["arguments"] = "run_command", json.dumps({"command": command}, ensure_ascii=False)
+    return out
+
+
 def episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars=MAX_THOUGHT_CHARS,
                   keep_exchanges=3, max_tool_chars=3000, v2=False):
     messages = dialog["messages"]
@@ -189,9 +223,19 @@ def episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars=MAX_
     for k, m in enumerate(messages):
         if m.get("role") != "assistant" or len(pairs) >= max_per_episode:
             continue
-        args = edit_args(m)
         thought = (m.get("thought") or "").strip()
-        if args is None or not thought or len(thought) > max_thought_chars:
+        if not thought or len(thought) > max_thought_chars:
+            continue
+        tmp = tmp_write_args(m) if v2 else None
+        if tmp is not None:
+            prefix = [{"role": "system", "content": system}] + trim_history(messages[:k], keep_exchanges,
+                                                                             max_tool_chars)
+            good = as_run_command(m, heredoc_command(tmp["filepath"], tmp["content"]))
+            pairs.append({"chosen": prefix + [good], "rejected": prefix + [copy.deepcopy(m)],
+                          "tools": tools, "thinking": True, "kind": "real_fix", "defect": "tmp_write"})
+            continue
+        args = edit_args(m)
+        if args is None:
             continue
         ok = status.get(m["tool_calls"][0]["id"]) == "ok"
         if v2:
@@ -220,10 +264,10 @@ def balance_synthetic(real, synthetic, per_real):
 
 
 def build(runs, system, exclude=(), max_per_episode=20, synthetic_per_real=1, max_thought_chars=MAX_THOUGHT_CHARS,
-          keep_exchanges=3, max_tool_chars=3000, v2=False):
-    """synthetic_per_real=0 -- брать все доступные синтетические пары."""
+          keep_exchanges=3, max_tool_chars=3000, v2=False, max_tmp=150):
+    """synthetic_per_real=0 -- брать все доступные синтетические пары; max_tmp -- потолок пар tmp_write (v2)."""
     tools = [t for t in ROOT_TOOL_SCHEMAS if t["function"]["name"] in ALLOWED_TOOLS]
-    real, synthetic = [], []
+    real, synthetic, tmp = [], [], []
     for run_dir in runs:
         for row, dialog in load_run(run_dir):
             if row["instance_id"] in exclude or row.get("error"):
@@ -231,16 +275,22 @@ def build(runs, system, exclude=(), max_per_episode=20, synthetic_per_real=1, ma
             for pair in episode_pairs(dialog, system, tools, max_per_episode, max_thought_chars,
                                        keep_exchanges, max_tool_chars, v2):
                 pair["task"] = row["instance_id"]
-                (real if pair["kind"] == "real_fix" else synthetic).append(pair)
+                if pair["defect"] == "tmp_write":
+                    tmp.append(pair)
+                else:
+                    (real if pair["kind"] == "real_fix" else synthetic).append(pair)
+    random.Random(0).shuffle(tmp)
+    tmp_used = tmp[:max_tmp]
     if not synthetic_per_real:
         used = synthetic
     elif v2:
         used = balance_synthetic(real, synthetic, synthetic_per_real)
     else:
         used = synthetic[:len(real) * synthetic_per_real]
-    stats = Counter({"real_fix": len(real), "synthetic_available": len(synthetic), "synthetic_used": len(used)})
-    stats.update(f"{p['kind']}:{p['defect']}" for p in real + used)
-    return real + used, stats
+    stats = Counter({"real_fix": len(real), "synthetic_available": len(synthetic), "synthetic_used": len(used),
+                     "tmp_write_available": len(tmp)})
+    stats.update(f"{p['kind']}:{p['defect']}" for p in real + used + tmp_used)
+    return real + used + tmp_used, stats
 
 
 def main():
@@ -258,6 +308,7 @@ def main():
     ap.add_argument("--v2", action="store_true",
                     help="все виды лишнего экранирования (\\n, \\\", \\t, \\\\), исправление сверяется с текстом файла")
     ap.add_argument("--exclude-file", default=None, help="json с {'ids': [...]}, например eval/mimo50.json")
+    ap.add_argument("--max-tmp", type=int, default=150, help="--v2: потолок пар write_file(/tmp) -> heredoc")
     args = ap.parse_args()
     with open(args.system, encoding="utf-8") as f:
         system = f.read()
@@ -266,7 +317,7 @@ def main():
         with open(args.exclude_file, encoding="utf-8") as f:
             exclude |= set(json.load(f)["ids"])
     pairs, stats = build(args.runs, system, exclude, args.max_per_episode, args.synthetic_per_real,
-                         args.max_thought_chars, args.keep_exchanges, args.max_tool_chars, args.v2)
+                         args.max_thought_chars, args.keep_exchanges, args.max_tool_chars, args.v2, args.max_tmp)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for p in pairs:

@@ -23,6 +23,7 @@ from llm.llm_client import LLMClient
 from rl.rollout import run_episode
 from sim.compaction import CompactingClient
 from sim.mimo_env import MimoRemoteEnv
+from sim.two_phase import SystemClient, run_episode_two_phase
 
 _LOCK = threading.Lock()
 MAX_MODEL_LEN = 32768
@@ -177,6 +178,8 @@ def run_one(task_id, args, client, rep=0):
                    budget_override={"tool_calls": getattr(args, "tool_calls", None),
                                     "time_minutes": getattr(args, "time_minutes", None),
                                     "turns": (args.tool_calls * 2 if getattr(args, "tool_calls", None) else None)})
+    two_phase = getattr(args, "two_phase", False)
+    base = client
     client = TracedClient(client, trace)
     if getattr(args, "compaction", "off") == "on":   # сжатие контекста, как в боевом харнессе
         client = CompactingClient(client)
@@ -184,7 +187,15 @@ def run_one(task_id, args, client, rep=0):
     with _LOCK:
         _ACTIVE[0] += 1
     try:
-        steps, messages, passed = run_episode(env, 0, client, None, None, temperature=args.temperature)
+        if two_phase:   # следователь -> исправитель (sim/two_phase.py); base -- клиент без системного промпта
+            def make_client(system):
+                c = SystemClient(TracedClient(base, trace), system)
+                return CompactingClient(c) if getattr(args, "compaction", "off") == "on" else c
+            steps, messages, passed, stats = run_episode_two_phase(
+                env, make_client, args.investigator_system, args.fixer_system, temperature=args.temperature)
+            row["two_phase"] = stats
+        else:
+            steps, messages, passed = run_episode(env, 0, client, None, None, temperature=args.temperature)
         row.update(passed=bool(passed), steps=len(steps), turns=env.ctx.turns_used,
                    tool_calls=env.ctx.tool_calls_used, crashed=bool(env.crashed),
                    reward=sum(s["reward"] for s in steps),
@@ -217,6 +228,11 @@ def run_one(task_id, args, client, rep=0):
           f"calls={row.get('tool_calls')} {row['seconds']}s [модель {tm['llm_s']}s/{tm['turns']} ходов/"
           f"{tm['ctok']} ток, инструменты {tm['tool_s']}s, старт {tm['reset_s']}s, "
           f"проверка {tm['finish_s']}s{comp}] err={row['error']}", flush=True)
+    tp = row.get("two_phase")
+    if tp:
+        print(f"    следователь: {tp['inv_calls']} вызовов, диагноз {'есть' if tp['inv_stopped'] else 'НЕТ'} "
+              f"({tp['diagnosis_chars']} симв.), запрещённых вызовов {tp['inv_forbidden']} | исправитель: "
+              f"{tp['fix_calls']} вызовов, первая правка на {tp['fix_first_edit_call']}-м", flush=True)
 
 
 def summarize(path):
@@ -305,7 +321,16 @@ def main():
                          "нельзя, если на этот сервер одновременно работает другой прогон")
     ap.add_argument("--system-file", default=None,
                     help="системный промпт агента, например submission_v1_noadapter/prompts/system.md")
+    ap.add_argument("--two-phase", action="store_true",
+                    help="следователь (только чтение, ответ -- диагноз) -> исправитель (--system-file + диагноз); "
+                         "см. sim/two_phase.py")
+    ap.add_argument("--investigator-file", default="prompts/two_phase/investigator.md",
+                    help="--two-phase: системный промпт следователя")
     args = ap.parse_args()
+    if args.two_phase:
+        assert args.system_file, "--two-phase: нужен --system-file (промпт исправителя)"
+        args.investigator_system = open(args.investigator_file, encoding="utf-8").read()
+        args.fixer_system = open(args.system_file, encoding="utf-8").read()
 
     os.makedirs(args.out, exist_ok=True)
     if args.clean_start:
@@ -331,8 +356,10 @@ def main():
     print("размышления модели:", args.thinking, flush=True)
     hidden = GRAPH_TOOLS if args.no_analyzer else ()
     print("скрытые инструменты:", sorted(hidden) or "нет", flush=True)
+    print("двухфазный режим:", "да, следователь " + args.investigator_file if args.two_phase else "нет", flush=True)
     client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
-                            system=system, thinking=(args.thinking == "on"), hide_tools=hidden)
+                            system=None if args.two_phase else system,   # в двух фазах промпт задаёт sim/two_phase
+                            thinking=(args.thinking == "on"), hide_tools=hidden)
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         list(ex.map(lambda t: run_one(t[0], args, client, t[1]), todo))
     if os.path.exists(path):

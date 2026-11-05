@@ -1,0 +1,18 @@
+# Solver: v5 unchanged (prompt, sampling, adapter pref_edit_v1).
+name: swe_baseline_agent
+model: gemma-4-31b-it-qat-w4a16-ct
+adapter: pref_edit_v1
+description: Resolves the GitHub issue.
+instruction: !include ../prompts/system.md
+tools:
+  - run_command
+  - read_file
+  - edit_file
+  - write_file
+  - get_status
+  - submit_patch
+skills:
+  - skills/tmp-bridge
+disallow_transfer_to_parent: true
+disallow_transfer_to_peers: true
+generate_content_config: !include ../configs/sampling.yaml

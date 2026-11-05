@@ -1,0 +1,9 @@
+# v5 + tmp-bridge: a one-call setup step, then the v5 solver (prompt, sampling and adapter unchanged).
+# A SequentialAgent runs the setup reliably; asking the solver to "first call X" is skipped by 31B
+# (robust-edit, discussion 747923: 11 of 16 tasks skipped it, the setup step ran in 47 of 48).
+name: swe_workflow
+agent_class: SequentialAgent
+description: Link /tmp for write_file and run_command, then solve the issue.
+sub_agents:
+  - config_path: sub_agents/setup.yaml
+  - config_path: sub_agents/solver.yaml

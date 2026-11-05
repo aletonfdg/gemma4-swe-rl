@@ -1,0 +1,19 @@
+# Setup step: one skill call, then "DONE". Same tool list as the solver: calling a tool the agent does not
+# have is fatal in ADK, and the harness's task prompt mentions the tools.
+name: setup
+model: gemma-4-31b-it-qat-w4a16-ct
+description: Links /tmp so write_file and run_command share it. Does not work on the issue.
+instruction: !include ../prompts/setup.md
+tools:
+  - run_command
+  - read_file
+  - edit_file
+  - write_file
+  - get_status
+  - submit_patch
+skills:
+  - skills/tmp-bridge
+output_key: setup_reply
+disallow_transfer_to_parent: true
+disallow_transfer_to_peers: true
+generate_content_config: !include ../configs/setup_sampling.yaml

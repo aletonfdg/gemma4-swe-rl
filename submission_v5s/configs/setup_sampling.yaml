@@ -1,0 +1,7 @@
+# Small thinking budget (robust-edit: with thinking_budget 0 a smaller model answered "thought thought ...").
+temperature: 0.0
+top_p: 0.95
+max_output_tokens: 2048
+thinking_config:
+  include_thoughts: true
+  thinking_budget: 512

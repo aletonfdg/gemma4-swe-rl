@@ -188,8 +188,9 @@ def run_one(task_id, args, client, rep=0):
         _ACTIVE[0] += 1
     try:
         if two_phase:   # следователь -> исправитель (sim/two_phase.py); base -- клиент без системного промпта
-            def make_client(system):
-                c = SystemClient(TracedClient(base, trace), system)
+            def make_client(system, phase):
+                model = args.investigator_client if phase == "investigator" else base
+                c = SystemClient(TracedClient(model, trace), system)
                 return CompactingClient(c) if getattr(args, "compaction", "off") == "on" else c
             steps, messages, passed, stats = run_episode_two_phase(
                 env, make_client, args.investigator_system, args.fixer_system, temperature=args.temperature)
@@ -326,6 +327,9 @@ def main():
                          "см. sim/two_phase.py")
     ap.add_argument("--investigator-file", default="prompts/two_phase/investigator.md",
                     help="--two-phase: системный промпт следователя")
+    ap.add_argument("--investigator-model", default=None,
+                    help="--two-phase: модель/адаптер следователя (по умолчанию -- как --model). Адаптер правок "
+                         "следователю не нужен: он не правит; базовая модель -- gemma-4-31b-it-qat-w4a16-ct")
     args = ap.parse_args()
     if args.two_phase:
         assert args.system_file, "--two-phase: нужен --system-file (промпт исправителя)"
@@ -356,10 +360,17 @@ def main():
     print("размышления модели:", args.thinking, flush=True)
     hidden = GRAPH_TOOLS if args.no_analyzer else ()
     print("скрытые инструменты:", sorted(hidden) or "нет", flush=True)
-    print("двухфазный режим:", "да, следователь " + args.investigator_file if args.two_phase else "нет", flush=True)
     client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
                             system=None if args.two_phase else system,   # в двух фазах промпт задаёт sim/two_phase
                             thinking=(args.thinking == "on"), hide_tools=hidden)
+    if args.two_phase:
+        inv_model = args.investigator_model or args.model
+        args.investigator_client = BaselineClient(base_url=args.llm_url, model=inv_model, max_tokens=args.max_tokens,
+                                                  thinking=(args.thinking == "on"), hide_tools=hidden)
+        print(f"двухфазный режим: следователь {inv_model} ({args.investigator_file}), исправитель {args.model}",
+              flush=True)
+    else:
+        print("двухфазный режим: нет", flush=True)
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         list(ex.map(lambda t: run_one(t[0], args, client, t[1]), todo))
     if os.path.exists(path):

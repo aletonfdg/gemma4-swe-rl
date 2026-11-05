@@ -127,20 +127,21 @@ def fixer_system(base_system, diagnosis):
 
 
 def run_episode_two_phase(env, make_client, investigator_system, fixer_base_system, temperature=0.2):
-    """-> (steps, messages, passed, stats). make_client(system) -- свежий клиент модели с этим системным
-    промптом (у каждой фазы свой: сжатие контекста хранит состояние своей истории)."""
+    """-> (steps, messages, passed, stats). make_client(system, phase) -- свежий клиент модели с этим системным
+    промптом для фазы "investigator" или "fixer" (у фаз может быть своя модель/адаптер; сжатие контекста
+    хранит состояние своей истории)."""
     prompt = env.reset(0)
     tracker = RewardTracker(env.task)
     steps = []
     stats = {"inv_turns": 0, "inv_calls": 0, "inv_forbidden": 0, "inv_stopped": False, "diagnosis_chars": 0,
              "fix_calls": 0, "fix_first_edit_call": None, "inv_budget_left": None}
-    inv_msgs, diagnosis = run_investigator(env, make_client(investigator_system), prompt,
+    inv_msgs, diagnosis = run_investigator(env, make_client(investigator_system, "investigator"), prompt,
                                            temperature, tracker, steps, stats)
     stats["diagnosis_chars"] = len(diagnosis)
     stats["inv_budget_left"] = not env.ctx.budget_exhausted()
     fix_msgs = []
     if not env.done:
-        fix_msgs = run_fixer(env, make_client(fixer_system(fixer_base_system, diagnosis)), prompt,
+        fix_msgs = run_fixer(env, make_client(fixer_system(fixer_base_system, diagnosis), "fixer"), prompt,
                              temperature, tracker, steps, stats)
     hit_budget = not env.ctx.patch_submitted and env.ctx.budget_exhausted()
     patch = env.finalize()

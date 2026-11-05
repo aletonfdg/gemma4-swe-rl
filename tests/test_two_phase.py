@@ -60,10 +60,15 @@ class ScriptedClient:
         return {"content": content, "tool_calls": calls, "finish_reason": "stop", "reasoning": None}
 
 
-def make_factory(scripts, seen):
+def make_factory(scripts, seen, phases=None):
     from sim.two_phase import SystemClient
     it = iter(scripts)
-    return lambda system: SystemClient(ScriptedClient(next(it), seen), system)
+
+    def factory(system, phase):
+        if phases is not None:
+            phases.append(phase)
+        return SystemClient(ScriptedClient(next(it), seen), system)
+    return factory
 
 
 def test_investigator_hands_diagnosis_to_fixer_with_fresh_history():
@@ -74,7 +79,9 @@ def test_investigator_hands_diagnosis_to_fixer_with_fresh_history():
     fix = [("", [call("edit_file", {"filepath": "a.py", "old_string": "a", "new_string": "b"}, 3)]),
            ("", [call("submit_patch", {}, 4)])]
     env = FakeEnv()
-    steps, messages, passed, stats = run_episode_two_phase(env, make_factory([inv, fix], seen), "INV", "BASE")
+    phases = []
+    steps, messages, passed, stats = run_episode_two_phase(env, make_factory([inv, fix], seen, phases), "INV", "BASE")
+    assert phases == ["investigator", "fixer"]
     assert passed and env.log == ["read_file", "edit_file", "submit_patch"]   # чужой вызов не дошёл до песочницы
     assert stats["inv_stopped"] and stats["inv_calls"] == 1 and stats["inv_forbidden"] == 1
     assert stats["fix_first_edit_call"] == 1 and stats["fix_calls"] == 2

@@ -18,7 +18,9 @@ build_inv_data оставляет заглушки в последнем ход�
   python -m train.fill_inv_data --data data/inv_pairs_v2.jsonl --out data/inv_pairs_v2_filled.jsonl --workers 8
 """
 import argparse
+import hashlib
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
@@ -161,8 +163,10 @@ def fill_one(rec, client, attempts=3):
         out["chosen"] = history + [{"role": "assistant", "content": diagnosis(
             hunks, cause, rec["gen"]["check"], rec["gen"].get("unseen", []))}]
     else:
+        # без инструментов: с ними модель на просьбу "ответь сейчас" почти всегда делает ещё вызов
+        # (41% go-пар не заполнились); история с вызовами при этом рендерится как обычно
         nudged = history + [{"role": "user", "content": PREMATURE_NUDGE}]
-        text = _retry(attempts, lambda t: client.chat(nudged, rec["tools"], temperature=t, max_tokens=2048,
+        text = _retry(attempts, lambda t: client.chat(nudged, [], temperature=t, max_tokens=2048,
                                                      thinking=False), parse_premature)
         if not text:
             return None
@@ -183,6 +187,11 @@ def is_filled(rec):
     return PLACEHOLDER not in json.dumps(rec["chosen"][-1]) + json.dumps(rec["rejected"][-1])
 
 
+def record_key(rec):
+    """Одна и та же пара до и после заполнения: общий префикс chosen не меняется."""
+    return hashlib.sha1(json.dumps([rec["task"], rec["kind"], rec["chosen"][:-1]], sort_keys=True).encode()).hexdigest()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/inv_pairs_v2.jsonl")
@@ -190,12 +199,19 @@ def main():
     ap.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
     ap.add_argument("--model", default="gemma-4-31b-it-qat-w4a16-ct")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--resume", action="store_true", help="оставить уже заполненные пары из --out, заполнить остальные")
     args = ap.parse_args()
     from llm.llm_client import LLMClient
     client = LLMClient(base_url=args.base_url, model=args.model)
     with open(args.data, encoding="utf-8") as f:
         records = [json.loads(line) for line in f if line.strip()]
     done, failed = [], {"stop": 0, "go": 0}
+    if args.resume and os.path.exists(args.out):
+        with open(args.out, encoding="utf-8") as f:
+            done = [json.loads(line) for line in f if line.strip()]
+        have = {record_key(r) for r in done}
+        records = [r for r in records if record_key(r) not in have]
+        print(f"уже заполнено {len(done)}, осталось {len(records)}", flush=True)
 
     def work(rec):
         try:

@@ -17,6 +17,15 @@ FILE/LINES/FIX/CHECK собираются из эталонного патча (
 История приводится к инструментам следователя: write_file('/tmp/x') -> run_command с heredoc (у
 следователя нет write_file); эпизод обрывается на первой правке исходника.
 
+inv_v2 (inv_v1 отвечал после 2 вызовов: решено 25/92 против 30 у базы, хотя FILE верный в 78%):
+  * история целиком, сокращаются только ответы инструментов без кода патча (compress_history);
+  * точка среза -- прочитаны все хунки главного файла (inv_v1: первый увиденный);
+  * go -- до --go-per-episode ходов до среза, сначала те, где файл уже упоминался, а код не прочитан;
+    stop и go поровну в пределах задачи;
+  * рассуждение последнего хода обеих сторон пишет fill_inv_data (у настоящих вызовов -- тоже), иначе
+    "есть рассуждение" = "диагноз";
+  * FIX не длиннее 1200 символов; хунки, которых модель не читала, -- только место (файл, строка).
+
   python -m train.build_inv_data --runs <папки прогонов> --tasks data/comp_full/tasks.jsonl \
       --exclude-file eval/two_phase_small.json --out data/inv_pairs.jsonl
 """
@@ -30,7 +39,7 @@ from collections import Counter
 
 from sim.tool_schemas import ROOT_TOOL_SCHEMAS
 from sim.two_phase import INVESTIGATOR_TOOLS
-from train.build_pref_data import as_run_command, heredoc_command, tmp_write_args, trim_history
+from train.build_pref_data import as_run_command, heredoc_command, tmp_write_args
 from train.build_sft_data import load_run
 
 INVESTIGATOR_PROMPT = "prompts/two_phase/investigator.md"
@@ -94,24 +103,37 @@ def changed_lines(hunks):
     return sum(1 for h in hunks for x in h["lines"] if x[:1] in "+-")
 
 
-def fix_text(hunks, max_changed=40):
+def fix_text(hunks, max_changed=30, max_chars=1200, unseen=()):
     """Изменение в виде мини-диффа по файлам: строки '-' и '+' с одной строкой контекста вокруг. Большие
-    патчи: целиком показываем первые хунки до max_changed строк, про остальные -- одна строка (файл, место),
-    чтобы исправитель знал, что правок больше."""
-    parts, shown, rest = [], 0, []
+    патчи: целиком показываем первые хунки до max_changed строк и max_chars символов, про остальные --
+    одна строка (файл, место), чтобы исправитель знал, что правок больше. Длинный FIX в обучении учит
+    следователя писать диагнозы на десятки тысяч символов (inv_v1: 5 эпизодов из 92 ушли на это)."""
+    parts, shown, chars = [], 0, 0
+    # хунки, кода которых модель не читала: только место, без диффа (диагноз не должен описывать невиденное)
+    rest = [f"{h['file']} around line {h['old_start']}" for h in unseen]
     for h in hunks:
         n = sum(1 for x in h["lines"] if x[:1] in "+-")
-        if parts and shown + n > max_changed:
+        size = sum(len(x) + 1 for x in h["lines"])
+        if parts and (shown + n > max_changed or chars + size > max_chars):
             rest.append(f"{h['file']} around line {h['old_start']} ({n} changed lines)")
             continue
         shown += n
+        chars += size
         lines = h["lines"]
         keep = set()
         for i, x in enumerate(lines):
             if x[:1] in "+-":
                 keep.update((i - 1, i, i + 1))
-        body = [lines[i] for i in range(len(lines)) if i in keep]
-        parts.append(f"{h['file']} (around line {h['old_start']}):\n" + "\n".join(body))
+        body, prev = [], None
+        for i in sorted(k for k in keep if 0 <= k < len(lines)):
+            if prev is not None and i > prev + 1:
+                body.append("    ...")           # пропущенные строки без изменений: иначе дифф выглядит связным
+            body.append(lines[i])
+            prev = i
+        text = "\n".join(body)
+        if len(text) > max_chars:            # первый хунк сам больше предела: обрезаем по строкам
+            text = text[:max_chars].rsplit("\n", 1)[0] + "\n    ... (the same change continues below)"
+        parts.append(f"{h['file']} (around line {h['old_start']}):\n" + text)
     if rest:
         parts.append("Same kind of change is also needed at: " + "; ".join(rest))
     return "\n\n".join(parts)
@@ -141,10 +163,11 @@ def check_command(task, hunks):
     return f'python -c "import {module}"'
 
 
-def diagnosis(hunks, cause, check):
-    files = list(dict.fromkeys(h["file"] for h in hunks))
+def diagnosis(hunks, cause, check, unseen=()):
+    """hunks -- прочитанные моделью (FIX с диффом), unseen -- остальные хунки патча (только место)."""
+    files = list(dict.fromkeys(h["file"] for h in list(hunks) + list(unseen)))
     return (f"FILE: {', '.join(files)}\nLINES: {lines_text(hunks)}\nCAUSE: {cause.strip()}\n"
-            f"FIX:\n{fix_text(hunks)}\nCHECK: {check}")
+            f"FIX:\n{fix_text(hunks, unseen=unseen)}\nCHECK: {check}")
 
 
 def is_source_edit(call):
@@ -184,20 +207,50 @@ def convert_history(messages):
     return out
 
 
-def find_cut(messages, hunks):
-    """-> индекс ответа инструмента, где модель впервые увидела эталонный кусок главного файла, или None
-    (не увидела до первой правки исходника)."""
+def core_hunks(hunks, share=0.5):
+    """Главные хунки: в главном файле и с числом изменённых строк не меньше share от самого большого.
+    Мелкие сопутствующие правки (импорт, аннотация) модель часто не читает до правки -- требовать их
+    значит потерять половину эпизодов; в FIX они идут только местом."""
     prim = primary_file(hunks)
+    size = {id(h): sum(1 for x in h["lines"] if x[:1] in "+-") for h in hunks}
+    top = max(size[id(h)] for h in hunks if h["file"] == prim)
+    return [h for h in hunks if h["file"] == prim and size[id(h)] >= share * top]
+
+
+def find_cut(messages, hunks):
+    """-> индекс ответа инструмента, после которого модель видела код всех главных хунков (core_hunks;
+    каждый -- в каком-нибудь ответе до этого места), или None (не увидела до первой правки исходника).
+    inv_v1 срезал на первом увиденном хунке. Остальные хунки в FIX с диффом, только если прочитаны."""
+    core = core_hunks(hunks)
+    left = [j for j, h in enumerate(hunks) if any(h is c for c in core)]
     for i, m in enumerate(messages):
         if m.get("role") == "assistant" and any(is_source_edit(c) for c in m.get("tool_calls") or []):
             return None
-        if m.get("role") == "tool" and any(hunk_seen(h, m.get("content") or "") for h in hunks if h["file"] == prim):
-            return i
+        if m.get("role") == "tool":
+            text = m.get("content") or ""
+            left = [j for j in left if not hunk_seen(hunks[j], text)]
+            if not left:
+                return i
     return None
 
 
-def _prefix(system, history, keep_exchanges, max_tool_chars):
-    return [{"role": "system", "content": system}] + trim_history(history, keep_exchanges, max_tool_chars)
+def compress_history(history, keys, key_chars=6000, other_chars=(800, 300, 120), max_context_chars=19000):
+    """Вся история (inv_v1 оставлял 6 последних обменов, и точка остановки выглядела как "сделал 2-3
+    вызова -- отвечай"). Ответы с кодом патча (есть строка из keys) режем до key_chars, остальные -- всё
+    короче, пока контекст не влезет; не влез -- None."""
+    for limit in other_chars:
+        out = []
+        for m in history:
+            m = dict(m)
+            if m.get("role") == "tool":
+                text = m.get("content") or ""
+                cap = key_chars if any(k in text for k in keys) else limit
+                if len(text) > cap:
+                    m["content"] = text[:cap] + " ...[truncated]"
+            out.append(m)
+        if _context_chars(out) <= max_context_chars:
+            return out
+    return None
 
 
 def _context_chars(msgs):
@@ -209,9 +262,21 @@ def _generated_turn():
     return {"role": "assistant", "content": PLACEHOLDER, "thought": PLACEHOLDER}
 
 
-def episode_records(task, messages, system, tools, stop_per_episode=2, keep_exchanges=6, max_tool_chars=4000,
-                    max_context_chars=24000):
-    """-> [запись] для одного эпизода: stop-пары после точки среза и одна go-пара перед ней."""
+def _real_turn(message):
+    """Настоящий ход модели с заглушкой вместо рассуждения: в двух третях прогонов рассуждения не
+    сохранились, и в inv_v1 "есть рассуждение" почти всегда означало "диагноз" -- модель выучила
+    "подумал -> отвечай". Теперь рассуждение последнего хода у обеих сторон пишет fill_inv_data."""
+    out = to_investigator(message)
+    out["thought"] = PLACEHOLDER
+    return out
+
+
+def _mentions(history, path):
+    return any(path in (m.get("content") or "") for m in history if m.get("role") == "tool")
+
+
+def episode_records(task, messages, system, tools, stop_per_episode=2, go_per_episode=2, max_context_chars=19000):
+    """-> [запись] для одного эпизода: stop-пары после точки среза и go-пары перед ней."""
     hunks = parse_hunks(task["patch"])
     if not hunks:
         return []
@@ -219,10 +284,18 @@ def episode_records(task, messages, system, tools, stop_per_episode=2, keep_exch
     if cut is None:
         return []
     prim = primary_file(hunks)
-    keys = [k for h in hunks if h["file"] == prim for k in key_lines(h)]
+    keys = [k for h in hunks for k in key_lines(h)]
     check = check_command(task, hunks)
-    gen_stop = {"mode": "stop", "problem": messages[0].get("content") or "", "fix": fix_text(hunks),
-                "check": check, "hunks": hunks}
+    problem = messages[0].get("content") or ""
+    base = {"task": task["instance_id"], "tools": tools, "thinking": True}
+
+    def prefix_at(k):
+        history = convert_history(messages[:k])
+        if history is None:
+            return None
+        history = compress_history(history, keys, max_context_chars=max_context_chars)
+        return None if history is None else [{"role": "system", "content": system}] + history
+
     records = []
     stops = []
     for k in range(cut + 1, len(messages)):
@@ -234,34 +307,36 @@ def episode_records(task, messages, system, tools, stop_per_episode=2, keep_exch
         if len(stops) >= stop_per_episode:
             break
     for k in stops:
-        history = convert_history(messages[:k])
-        if history is None:
-            break
-        prefix = _prefix(system, history, keep_exchanges, max_tool_chars)
-        if not any(key in (x.get("content") or "") for x in prefix if x.get("role") == "tool" for key in keys):
-            continue          # обрезка истории съела нужный код: диагноз был бы не из чего
-        if _context_chars(prefix) > max_context_chars:
+        prefix = prefix_at(k)
+        if prefix is None:
             continue
-        records.append({"kind": "stop", "task": task["instance_id"], "tools": tools, "thinking": True,
-                        "chosen": prefix + [_generated_turn()],
-                        "rejected": prefix + [to_investigator(messages[k])], "gen": gen_stop})
-    # go: последний ход перед точкой среза -- вызов, который и показал нужный код. Самый первый ход не
-    # берём: до него модель ещё ничего не видела, преждевременный диагноз там слишком очевидно плох.
-    before = [k for k in range(1, cut) if messages[k].get("role") == "assistant"]
-    if len(before) >= 2:
-        k = before[-1]
-        history = convert_history(messages[:k])
-        conv = to_investigator(messages[k])
-        if history is not None and conv is not None:
-            prefix = _prefix(system, history, keep_exchanges, max_tool_chars)
-            if _context_chars(prefix) <= max_context_chars:
-                records.append({"kind": "go", "task": task["instance_id"], "tools": tools, "thinking": True,
-                                "chosen": prefix + [conv], "rejected": prefix + [_generated_turn()],
-                                "gen": {"mode": "premature"}})
+        seen_text = "\n".join(x.get("content") or "" for x in prefix if x.get("role") == "tool")
+        seen = [h for h in hunks if hunk_seen(h, seen_text)]
+        if not all(any(c is h for h in seen) for c in core_hunks(hunks)):
+            continue          # сокращение съело нужный код: диагноз был бы не из чего
+        unseen = [h for h in hunks if h not in seen]
+        gen = {"mode": "stop", "problem": problem, "fix": fix_text(seen, unseen=unseen), "check": check,
+               "hunks": seen, "unseen": unseen, "call": True}
+        records.append(dict(base, kind="stop", chosen=prefix + [_generated_turn()],
+                            rejected=prefix + [_real_turn(messages[k])], gen=gen))
+    # go: ходы до точки среза. Сначала трудные -- файл уже упоминался (grep, список), но код ещё не прочитан:
+    # inv_v1 в таких местах и отвечал, угадав файл (FILE верный в 78%, решено 25/92).
+    before = [k for k in range(1, cut) if messages[k].get("role") == "assistant"
+              and to_investigator(messages[k]) is not None]
+    hard = [k for k in before if _mentions(messages[:k], prim)]
+    easy = [k for k in before if k not in hard and k > 1]
+    for k in (hard[::-1] + easy[::-1])[:go_per_episode]:
+        prefix = prefix_at(k)
+        if prefix is None:
+            continue
+        records.append(dict(base, kind="go", chosen=prefix + [_real_turn(messages[k])],
+                            rejected=prefix + [_generated_turn()],
+                            gen={"mode": "premature", "problem": problem, "call": True}))
     return records
 
 
-def build(runs, tasks, system, exclude=(), stop_per_episode=2, max_changed=120, max_per_task=24, seed=0):
+def build(runs, tasks, system, exclude=(), stop_per_episode=2, max_changed=120, max_per_task=24, seed=0,
+          go_per_episode=2):
     tools = [t for t in ROOT_TOOL_SCHEMAS if t["function"]["name"] in INVESTIGATOR_TOOLS]
     stats, by_task = Counter(), {}
     for run_dir in runs:
@@ -277,14 +352,21 @@ def build(runs, tasks, system, exclude=(), stop_per_episode=2, max_changed=120, 
             if not hunks or changed_lines(hunks) > max_changed:
                 stats["patch_too_big_or_no_source"] += 1
                 continue
-            recs = episode_records(tasks[iid], dialog["messages"], system, tools, stop_per_episode)
+            recs = episode_records(tasks[iid], dialog["messages"], system, tools, stop_per_episode, go_per_episode)
             stats["episodes_used" if recs else "episodes_no_cut"] += 1
             by_task.setdefault(iid, []).extend(recs)
     rng = random.Random(seed)
     out = []
     for iid, recs in sorted(by_task.items()):
+        # одна задача не должна заполнить всё; stop и go поровну в пределах задачи, чтобы адаптер не учил
+        # "эта задача -> отвечай"
         rng.shuffle(recs)
-        out.extend(recs[:max_per_task])        # одна задача не должна заполнить всё
+        out.extend([r for r in recs if r["kind"] == "stop"][:max_per_task // 2] +
+                   [r for r in recs if r["kind"] == "go"][:max_per_task // 2])
+    # общий баланс: больший вид -- не больше 1.2 x меньшего (inv_v1: stop 453 против go 141)
+    stops, gos = [r for r in out if r["kind"] == "stop"], [r for r in out if r["kind"] == "go"]
+    cap = int(1.2 * min(len(stops), len(gos)))
+    out = stops[:cap] + gos[:cap]
     rng.shuffle(out)
     stats.update(r["kind"] for r in out)
     stats["tasks"] = len({r["task"] for r in out})
@@ -299,6 +381,7 @@ def main():
     ap.add_argument("--exclude-file", default=None, help="json с ключом all_ids или ids (оценочные задачи)")
     ap.add_argument("--out", default="data/inv_pairs.jsonl")
     ap.add_argument("--stop-per-episode", type=int, default=2)
+    ap.add_argument("--go-per-episode", type=int, default=2)
     ap.add_argument("--max-changed", type=int, default=120, help="патчи длиннее (строк +/-) не берём")
     ap.add_argument("--max-per-task", type=int, default=24)
     args = ap.parse_args()
@@ -317,7 +400,7 @@ def main():
     with open(args.system, encoding="utf-8") as f:
         system = f.read()
     records, stats = build(args.runs, tasks, system, exclude, args.stop_per_episode, args.max_changed,
-                           args.max_per_task)
+                           args.max_per_task, go_per_episode=args.go_per_episode)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for r in records:

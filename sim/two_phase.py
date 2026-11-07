@@ -121,8 +121,10 @@ def run_fixer(env, client, prompt, temperature, tracker, steps, stats):
 def fixer_system(base_system, diagnosis):
     note = diagnosis or "(the investigation step ended without a diagnosis; investigate briefly yourself)"
     return (f"{base_system}\n\n## Diagnosis from the investigation step\n"
-            "A previous step already read the code and wrote this diagnosis. Start from it: open only the lines "
-            "you are about to change, apply the fix with edit_file, check it once, then call submit_patch.\n\n"
+            "A previous step already read the code and wrote this diagnosis. Start from it: open the lines it "
+            "names and check that the code there really behaves as the CAUSE says. If it does, apply the fix "
+            "with edit_file, check it once, then call submit_patch. If the code does not match the diagnosis, "
+            "trust the code: look briefly at the nearby code the issue points to before editing.\n\n"
             f"{note}\n")
 
 

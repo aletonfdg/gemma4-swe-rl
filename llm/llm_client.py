@@ -1,6 +1,10 @@
 # llm/llm_client.py -- chat.completions с tools= и логпробами (реальный протокол харнесса)
 from openai import OpenAI
 
+# Без этого vLLM не знает, где у Gemma 4 рассуждение, и thinking_token_budget не действует
+THINKING_BUDGET_SERVER_ARGS = ["--reasoning-config",
+                               '{"reasoning_start_str": "<|channel>", "reasoning_end_str": "<channel|>"}']
+
 
 class LLMClient:
     def __init__(self, base_url="http://127.0.0.1:8000/v1", api_key="EMPTY",
@@ -9,16 +13,21 @@ class LLMClient:
         self.model = model
 
     def chat(self, messages, tools, temperature=0.9, max_tokens=4096, lora_name: str | None = None,
-             thinking: bool = True):
+             thinking: bool = True, thinking_budget: int | None = None):
         # `thought` -- рассуждение прошлых ходов, которое эпизод хранит для обучения; модели оно не уходит
         messages = [{k: v for k, v in m.items() if k != "thought"} for m in messages]
+        extra = {"chat_template_kwargs": {"enable_thinking": bool(thinking)}}
+        if thinking and thinking_budget:
+            # как thinking_budget из sampling.yaml на Kaggle: vLLM закрывает рассуждение после N токенов
+            # (сервер нужен с --reasoning-config, см. THINKING_BUDGET_SERVER_ARGS)
+            extra["thinking_token_budget"] = int(thinking_budget)
         kwargs = dict(
             model=lora_name or self.model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
             logprobs=True,
-            extra_body={"chat_template_kwargs": {"enable_thinking": bool(thinking)}},
+            extra_body=extra,
         )
         if tools:   # пустой список (например, запрос на сводку) -- без tools и tool_choice, иначе сервер отвечает 400
             kwargs.update(tools=tools, tool_choice="auto")

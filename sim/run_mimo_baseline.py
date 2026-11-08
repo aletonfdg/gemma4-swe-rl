@@ -113,8 +113,9 @@ class BaselineClient(LLMClient):
     """Тот же клиент, но с лимитом вывода ближе к боевому sampling.yaml (там 16384 токенов;
     с растущим контекстом 32768 столько не помещается вместе с промптом, берём 8192)."""
 
-    def __init__(self, *a, max_tokens=8192, system=None, thinking=True, hide_tools=(), **kw):
+    def __init__(self, *a, max_tokens=8192, system=None, thinking=True, hide_tools=(), thinking_budget=None, **kw):
         super().__init__(*a, **kw)
+        self._thinking_budget = thinking_budget   # None = без лимита (как было); Kaggle: thinking_budget из sampling.yaml
         self._hide_tools = set(hide_tools)    # инструменты, которых в этой среде нет (граф, аналитик)
         self._max_tokens = max_tokens
         self._thinking = thinking     # False = enable_thinking=false (в правилах thinking_budget: 0)
@@ -129,7 +130,8 @@ class BaselineClient(LLMClient):
         for _ in range(2):
             try:
                 return super().chat(messages, tools, temperature=temperature,
-                                    max_tokens=limit, lora_name=lora_name, thinking=self._thinking)
+                                    max_tokens=limit, lora_name=lora_name, thinking=self._thinking,
+                                    thinking_budget=self._thinking_budget)
             except BadRequestError as e:
                 m = re.search(r"at least (\d+) input tokens", str(e))
                 if not m:
@@ -313,6 +315,9 @@ def main():
                     help="сжатие контекста как в боевом харнессе (порог 14336 токенов); off = как раньше")
     ap.add_argument("--thinking", choices=("on", "off"), default="on",
                     help="off = без размышлений модели (enable_thinking=false): ходы короче, их больше за бюджет")
+    ap.add_argument("--thinking-budget", type=int, default=None,
+                    help="лимит токенов рассуждения на ход, как thinking_budget в sampling.yaml (на Kaggle соблюдается); "
+                         "серверу vLLM нужен llm.llm_client.THINKING_BUDGET_SERVER_ARGS")
     ap.add_argument("--tool-calls", type=int, default=None,
                     help="лимит вызовов инструментов на задачу (по умолчанию из eval_config.yaml; в боевом харнессе 100)")
     ap.add_argument("--time-minutes", type=float, default=None,
@@ -357,16 +362,18 @@ def main():
 
     system = open(args.system_file, encoding="utf-8").read() if args.system_file else None
     print("системный промпт:", args.system_file or "нет (голая модель)", flush=True)
-    print("размышления модели:", args.thinking, flush=True)
+    print("размышления модели:", args.thinking, "| лимит рассуждения:", args.thinking_budget or "нет", flush=True)
     hidden = GRAPH_TOOLS if args.no_analyzer else ()
     print("скрытые инструменты:", sorted(hidden) or "нет", flush=True)
     client = BaselineClient(base_url=args.llm_url, model=args.model, max_tokens=args.max_tokens,
                             system=None if args.two_phase else system,   # в двух фазах промпт задаёт sim/two_phase
-                            thinking=(args.thinking == "on"), hide_tools=hidden)
+                            thinking=(args.thinking == "on"), hide_tools=hidden,
+                            thinking_budget=args.thinking_budget)
     if args.two_phase:
         inv_model = args.investigator_model or args.model
         args.investigator_client = BaselineClient(base_url=args.llm_url, model=inv_model, max_tokens=args.max_tokens,
-                                                  thinking=(args.thinking == "on"), hide_tools=hidden)
+                                                  thinking=(args.thinking == "on"), hide_tools=hidden,
+                                                  thinking_budget=args.thinking_budget)
         print(f"двухфазный режим: следователь {inv_model} ({args.investigator_file}), исправитель {args.model}",
               flush=True)
     else:

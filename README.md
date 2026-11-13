@@ -31,9 +31,8 @@ Using an NLL-anchored pairwise loss, our preference adapter completely eliminate
 ├── evaluation/                 # Raw agent execution logs and 312 analyzed episodes (§3)
 ├── sim/
 │   └── mimo_server.py          # Docker sandbox server for local environment rollouts
-└── notebooks/
-    ├── colab_pref.ipynb        # Interactive pipeline for preference data curation
-    └── colab_pref_onpolicy.ipynb # On-policy rollout collection notebook
+├── colab_pref.ipynb        # Interactive pipeline for preference data curation
+└── colab_pref_onpolicy.ipynb # On-policy rollout collection notebook
 ```
 ---
 

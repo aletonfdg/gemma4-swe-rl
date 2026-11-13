@@ -79,13 +79,6 @@ python train/pref_lora.py \
 
 ---
 
-## Training Code Snapshot & Artifacts
-
-The full training snapshots, raw configuration logs, and checkpoints mentioned in the paper are permanently archived and accessible via Google Drive:
-* **[Training Code & Log Snapshot (Google Drive)](https://drive.google.com/file/d/19BA9B2LhWz_KD9jIZHMJgSM5ITW3MkyO/view?usp=sharing)** *(Publicly accessible link, no authentication required)*
-
----
-
 ## 📖 Citation
 
 If you build upon this work, use our minimal-difference preference pairs, or find our findings useful in your research, please cite it as follows:

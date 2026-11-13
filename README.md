@@ -36,14 +36,14 @@ Using an NLL-anchored pairwise loss, our preference adapter completely eliminate
 
 ---
 
-##⚙️ Key Technical Highlights
+## ⚙️ Key Technical Highlights
  * Failure Census (§3): Systematic analysis of 312 agent episodes revealing that formatting defects (\n escapes) and infinite test-script creation loops (/tmp/repro*.py) dominate 31B agent failures.
  * Minimal-Difference Pairs (§4.1): Pairs sharing the system prompt, trimmed history (\le 8,192 tokens), and reasoning block (reasoning_content), isolating the gradient updates strictly to the defect.
  * QAT w4a16 LoRA Workaround (§4.3): A single-GPU memory recipe for transformers 5.x and compressed-tensors that decompresses packed weights via run_compressed=False and computes gradients in a memory-efficient three-pass scheme, fitting within 72 GB VRAM on an A100 80GB.
 
 ---
 
-##Quick Start & Reproduction
+## Quick Start & Reproduction
 Prerequisites
  * Python 3.10+
  * PyTorch with CUDA support
@@ -67,7 +67,7 @@ python train/pref_lora.py \
 
 ---
 
-##📊 Summary of Results
+## 📊 Summary of Results
 | Model / Configuration | Edit Defect Rate (\text{literal } \textbackslash n) | Public Leaderboard Score (58 tasks) |
 |---|---|---|
 | Base Gemma 4 31B-it (Prompt P1) | 28% | 0.15 |
@@ -76,7 +76,7 @@ python train/pref_lora.py \
 
 ---
 
-##Training Code Snapshot & Artifacts
+## Training Code Snapshot & Artifacts
 The full training snapshots and configuration logs are available via Google Drive (public link):
  * Training Code & Log Snapshot (Google Drive)
 Citation
@@ -92,7 +92,7 @@ If you find this repository or our findings useful in your research, please cite
 
 ---
 
-##License
+## License
 Distributed under the Apache 2.0 License. See LICENSE for more information.
 
 

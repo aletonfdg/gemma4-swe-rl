@@ -48,15 +48,18 @@ Prerequisites
  * Python 3.10+
  * PyTorch with CUDA support
  * 1x NVIDIA A100 (80GB VRAM recommended for QAT LoRA training)
-1. Installation
+1. Installatio
+```bash
 git clone [https://github.com/aletonfdg/gemma4-swe-rl.git](https://github.com/aletonfdg/gemma4-swe-rl.git)
 cd gemma4-swe-rl
 pip install -r requirements.txt # or uv sync
-
+```
 2. Build Preference Datasets
+```bash
 python train/build_pref_data.py --logs_dir ./logs --output_dir ./data/pairs
-
+```
 3. Train Preference Adapter
+```bash
 python train/pref_lora.py \
     --model_name_or_path "google/gemma-4-31b-it-qat-w4a16-ct" \
     --data_path "./data/pairs/edit_pairs.json" \
@@ -64,7 +67,7 @@ python train/pref_lora.py \
     --lora_r 32 \
     --lora_alpha 64 \
     --learning_rate 3e-5
-
+```
 ---
 
 ## 📊 Summary of Results

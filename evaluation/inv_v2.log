@@ -1,0 +1,132 @@
+Загрузка google/gemma-4-31B-it-qat-w4a16-ct (decompress=True) ...  
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.  
+[transformers] `run_compressed` is deprecated and will be removed in a future version. Use `dequantize=True` instead of `run_compressed=False`.  
+/usr/local/lib/python3.13/dist-packages/transformers/quantizers/auto.py:279: UserWarning: You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading already has a `quantization_config` attribute. The `quantization_config` from the model will be used.However, loading attributes (e.g. ['dequantize', 'use_optimized_inference']) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored.  
+ warnings.warn(warning_msg)  
+Applying quantization config: 0%| | 0/410 [00:00<?, ?it/s]  
+Applying quantization config: 100%|██████████| 410/410 [00:00<00:00, 6978.73it/s]  
+Compressing model: 0%| | 0/410 [00:00<?, ?it/s]  
+Compressing model: 100%|██████████| 410/410 [00:00<00:00, 10587.24it/s]  
+Loading weights: 0%| | 0/2009 [00:00<?, ?it/s]  
+Loading weights: 0%| | 1/2009 [00:01<40:09, 1.20s/it]  
+Loading weights: 2%|▏ | 37/2009 [00:01<00:50, 38.74it/s]  
+Loading weights: 4%|▍ | 78/2009 [00:01<00:22, 86.95it/s]  
+Loading weights: 6%|▌ | 117/2009 [00:01<00:14, 134.23it/s]  
+Loading weights: 8%|▊ | 151/2009 [00:01<00:11, 168.84it/s]  
+Loading weights: 10%|▉ | 191/2009 [00:01<00:08, 214.60it/s]  
+Loading weights: 11%|█▏ | 230/2009 [00:01<00:07, 246.59it/s]  
+Loading weights: 13%|█▎ | 271/2009 [00:01<00:06, 282.85it/s]  
+Loading weights: 15%|█▌ | 311/2009 [00:02<00:05, 309.79it/s]  
+Loading weights: 17%|█▋ | 348/2009 [00:02<00:05, 307.71it/s]  
+Loading weights: 20%|█▉ | 392/2009 [00:02<00:04, 335.78it/s]  
+Loading weights: 21%|██▏ | 429/2009 [00:02<00:04, 334.02it/s]  
+Loading weights: 24%|██▎ | 476/2009 [00:02<00:04, 360.43it/s]  
+Loading weights: 26%|██▌ | 514/2009 [00:02<00:04, 342.37it/s]  
+Loading weights: 28%|██▊ | 557/2009 [00:02<00:04, 358.60it/s]  
+Loading weights: 30%|██▉ | 594/2009 [00:02<00:04, 350.32it/s]  
+Loading weights: 32%|███▏ | 641/2009 [00:02<00:03, 371.77it/s]  
+Loading weights: 34%|███▍ | 679/2009 [00:03<00:03, 349.13it/s]  
+Loading weights: 36%|███▌ | 722/2009 [00:03<00:03, 359.54it/s]  
+Loading weights: 38%|███▊ | 759/2009 [00:03<00:03, 349.42it/s]  
+Loading weights: 40%|████ | 806/2009 [00:03<00:03, 370.61it/s]  
+Loading weights: 42%|████▏ | 844/2009 [00:03<00:03, 350.35it/s]  
+Loading weights: 44%|████▍ | 887/2009 [00:03<00:03, 348.09it/s]  
+Loading weights: 46%|████▋ | 931/2009 [00:03<00:02, 368.69it/s]  
+Loading weights: 48%|████▊ | 971/2009 [00:03<00:02, 373.66it/s]  
+Loading weights: 50%|█████ | 1009/2009 [00:03<00:02, 351.27it/s]  
+Loading weights: 52%|█████▏ | 1051/2009 [00:04<00:02, 358.88it/s]  
+Loading weights: 54%|█████▍ | 1088/2009 [00:04<00:02, 349.52it/s]  
+Loading weights: 57%|█████▋ | 1136/2009 [00:04<00:02, 373.99it/s]  
+Loading weights: 58%|█████▊ | 1174/2009 [00:04<00:02, 348.31it/s]  
+Loading weights: 61%|██████ | 1217/2009 [00:04<00:02, 360.87it/s]  
+Loading weights: 62%|██████▏ | 1254/2009 [00:04<00:02, 351.65it/s]  
+Loading weights: 65%|██████▍ | 1301/2009 [00:04<00:01, 372.61it/s]  
+Loading weights: 67%|██████▋ | 1339/2009 [00:04<00:01, 351.56it/s]  
+Loading weights: 69%|██████▉ | 1382/2009 [00:05<00:01, 364.00it/s]  
+Loading weights: 71%|███████ | 1419/2009 [00:05<00:01, 352.40it/s]  
+Loading weights: 73%|███████▎ | 1465/2009 [00:05<00:01, 364.51it/s]  
+Loading weights: 75%|███████▍ | 1502/2009 [00:05<00:01, 345.93it/s]  
+Loading weights: 77%|███████▋ | 1547/2009 [00:05<00:01, 360.02it/s]  
+Loading weights: 79%|███████▉ | 1584/2009 [00:05<00:01, 351.55it/s]  
+Loading weights: 81%|████████ | 1631/2009 [00:05<00:01, 349.97it/s]  
+Loading weights: 85%|████████▍ | 1706/2009 [00:05<00:00, 454.34it/s]  
+Loading weights: 90%|█████████ | 1812/2009 [00:05<00:00, 610.65it/s]  
+Loading weights: 95%|█████████▌| 1918/2009 [00:06<00:00, 731.70it/s]  
+Loading weights: 100%|██████████| 2009/2009 [00:06<00:00, 327.18it/s]  
+Dispatching model: 0%| | 0/1763 [00:00<?, ?it/s]  
+Dispatching model: 100%|██████████| 1763/1763 [00:00<00:00, 20519.80it/s]  
+Decompressing model: 0%| | 0/410 [00:00<?, ?it/s]  
+Decompressing model: 0%| | 1/410 [00:00<01:13, 5.59it/s]  
+Decompressing model: 20%|█▉ | 81/410 [00:00<00:00, 355.24it/s]  
+Decompressing model: 39%|███▉ | 159/410 [00:00<00:00, 519.08it/s]  
+Decompressing model: 58%|█████▊ | 238/410 [00:00<00:00, 614.16it/s]  
+Decompressing model: 79%|███████▊ | 322/410 [00:00<00:00, 688.23it/s]  
+Decompressing model: 99%|█████████▉| 407/410 [00:00<00:00, 738.17it/s]  
+Decompressing model: 100%|██████████| 410/410 [00:00<00:00, 595.53it/s]  
+ CompressedLinear: 0  
+ model.language_model.layers.0.self_attn.q_proj: Linear, forward=Linear.forward  
+ weight_scale: (8192, 168) torch.bfloat16  
+ weight_shape: (2,) torch.int64  
+ weight: (8192, 5376) torch.bfloat16  
+ quantization_status=QuantizationStatus.DECOMPRESSED  
+ VRAM после загрузки: allocated=60.0 reserved=70.3 / 79.3 GB (пик 60.3)  
+ LoRA: 410 слоёв, обучаемых параметров 244,858,880 (~467 МБ в bf16)  
+ VRAM после LoRA: allocated=60.4 reserved=66.0 / 79.3 GB (пик 60.4)  
+ пар: 387, отброшено слишком длинных: 0, по видам: {'go': 183, 'stop': 204}  
+ reference: 50/387  
+ reference: 100/387  
+ reference: 150/387  
+ reference: 200/387  
+ reference: 250/387  
+ reference: 300/387  
+ reference: 350/387  
+ reference посчитан для 387 пар  
+ train 330 пар (с повторами), eval 57, шагов оптимизатора 41  
+ eval до обучения [go, 24 пар]: доля пар chosen>rejected 0.00, средняя разность logp 0.00  
+ eval до обучения [stop, 33 пар]: доля пар chosen>rejected 0.00, средняя разность logp 0.00  
+ eval до обучения [все, 57 пар]: доля пар chosen>rejected 0.00, средняя разность logp 0.00  
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.  
+epoch 0 step 2/41 pref-loss 0.6495 z 0.093 lr 2.98e-05  
+ VRAM шаг 2: allocated=61.1 reserved=75.9 / 79.3 GB (пик 70.1)  
+epoch 0 step 4/41 pref-loss 0.2719 z 2.285 lr 2.93e-05  
+ VRAM шаг 4: allocated=61.1 reserved=75.9 / 79.3 GB (пик 70.1)  
+epoch 0 step 6/41 pref-loss 0.0151 z 6.327 lr 2.84e-05  
+ VRAM шаг 6: allocated=61.2 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 8/41 pref-loss 0.0127 z 8.223 lr 2.73e-05  
+ VRAM шаг 8: allocated=61.0 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 10/41 pref-loss 0.0013 z 10.250 lr 2.58e-05  
+ VRAM шаг 10: allocated=61.1 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 12/41 pref-loss 0.0015 z 11.682 lr 2.41e-05  
+ VRAM шаг 12: allocated=61.2 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 14/41 pref-loss 0.0002 z 11.374 lr 2.22e-05  
+ VRAM шаг 14: allocated=61.1 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 16/41 pref-loss 0.0001 z 11.333 lr 2.01e-05  
+ VRAM шаг 16: allocated=61.0 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 18/41 pref-loss 0.0038 z 16.931 lr 1.79e-05  
+ VRAM шаг 18: allocated=61.1 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 20/41 pref-loss 0.0027 z 16.463 lr 1.56e-05  
+ VRAM шаг 20: allocated=61.1 reserved=76.6 / 79.3 GB (пик 70.7)  
+epoch 0 step 22/41 pref-loss 0.0019 z 15.264 lr 1.33e-05  
+ VRAM шаг 22: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 24/41 pref-loss 0.0050 z 17.563 lr 1.10e-05  
+ VRAM шаг 24: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 26/41 pref-loss 0.0016 z 14.180 lr 8.86e-06  
+ VRAM шаг 26: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 28/41 pref-loss 0.0003 z 17.532 lr 6.85e-06  
+ VRAM шаг 28: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 30/41 pref-loss 0.0010 z 16.440 lr 5.02e-06  
+ VRAM шаг 30: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 32/41 pref-loss 0.0001 z 19.285 lr 3.43e-06  
+ VRAM шаг 32: allocated=61.0 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 34/41 pref-loss 0.0738 z 18.242 lr 2.11e-06  
+ VRAM шаг 34: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 36/41 pref-loss 0.0008 z 17.737 lr 1.09e-06  
+ VRAM шаг 36: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 38/41 pref-loss 0.0058 z 12.330 lr 3.95e-07  
+ VRAM шаг 38: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+epoch 0 step 40/41 pref-loss 0.0030 z 16.860 lr 4.40e-08  
+ VRAM шаг 40: allocated=61.1 reserved=76.9 / 79.3 GB (пик 70.7)  
+ eval в конце [go, 24 пар]: доля пар chosen>rejected 1.00, средняя разность logp 39.09  
+ eval в конце [stop, 33 пар]: доля пар chosen>rejected 1.00, средняя разность logp 171.95  
+ eval в конце [все, 57 пар]: доля пар chosen>rejected 1.00, средняя разность logp 116.01  
+ сохранено adapters/inv_v2 (410 слоёв, 467 МБ)

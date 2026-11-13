@@ -1,0 +1,310 @@
+групп в обучении: 78 (с хотя бы одним успехом 33); ходов: + 468, - 517  
+отброшено: {'excluded': 60, 'bad_tool_name': 1, 'runaway_text': 18, 'group_no_spread': 4, 'group_too_small': 143}  
+Загрузка /content/model (decompress=True) ...  
+[transformers] `run_compressed` is deprecated and will be removed in a future version. Use `dequantize=True` instead of `run_compressed=False`.  
+/usr/local/lib/python3.13/dist-packages/transformers/quantizers/auto.py:279: UserWarning: You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading already has a `quantization_config` attribute. The `quantization_config` from the model will be used.However, loading attributes (e.g. ['dequantize', 'use_optimized_inference']) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored.  
+ warnings.warn(warning_msg)  
+Compressing model: 0%| | 0/410 [00:00<?, ?it/s]  
+Compressing model: 8%|▊ | 34/410 [00:00<00:01, 339.54it/s]  
+Compressing model: 17%|█▋ | 69/410 [00:00<00:00, 343.14it/s]  
+Compressing model: 25%|██▌ | 104/410 [00:00<00:00, 337.31it/s]  
+Compressing model: 34%|███▎ | 138/410 [00:00<00:00, 333.64it/s]  
+Compressing model: 42%|████▏ | 173/410 [00:00<00:00, 336.51it/s]  
+Compressing model: 51%|█████ | 208/410 [00:00<00:00, 338.21it/s]  
+Compressing model: 59%|█████▉ | 242/410 [00:00<00:00, 336.41it/s]  
+Compressing model: 68%|██████▊ | 277/410 [00:00<00:00, 338.32it/s]  
+Compressing model: 76%|███████▌ | 312/410 [00:00<00:00, 339.84it/s]  
+Compressing model: 85%|████████▍ | 347/410 [00:01<00:00, 341.34it/s]  
+Compressing model: 93%|█████████▎| 382/410 [00:01<00:00, 342.09it/s]  
+Compressing model: 100%|██████████| 410/410 [00:01<00:00, 339.60it/s]  
+Loading weights: 0%| | 0/2009 [00:00<?, ?it/s]  
+Loading weights: 0%| | 1/2009 [00:00<15:57, 2.10it/s]  
+Loading weights: 0%| | 3/2009 [00:01<13:33, 2.46it/s]  
+Loading weights: 2%|▏ | 34/2009 [00:01<00:52, 37.64it/s]  
+Loading weights: 4%|▎ | 75/2009 [00:01<00:21, 89.76it/s]  
+Loading weights: 6%|▌ | 118/2009 [00:01<00:13, 143.84it/s]  
+Loading weights: 8%|▊ | 152/2009 [00:01<00:10, 178.09it/s]  
+Loading weights: 10%|▉ | 191/2009 [00:01<00:08, 221.45it/s]  
+Loading weights: 11%|█▏ | 230/2009 [00:01<00:07, 252.13it/s]  
+Loading weights: 13%|█▎ | 267/2009 [00:01<00:06, 279.80it/s]  
+Loading weights: 15%|█▌ | 311/2009 [00:02<00:05, 310.77it/s]  
+Loading weights: 17%|█▋ | 347/2009 [00:02<00:05, 306.52it/s]  
+Loading weights: 20%|█▉ | 392/2009 [00:02<00:04, 334.58it/s]  
+Loading weights: 21%|██▏ | 428/2009 [00:02<00:04, 329.56it/s]  
+Loading weights: 24%|██▎ | 476/2009 [00:02<00:04, 359.15it/s]  
+Loading weights: 26%|██▌ | 514/2009 [00:02<00:04, 341.23it/s]  
+Loading weights: 28%|██▊ | 557/2009 [00:02<00:04, 357.38it/s]  
+Loading weights: 30%|██▉ | 594/2009 [00:02<00:04, 346.71it/s]  
+Loading weights: 32%|███▏ | 641/2009 [00:03<00:03, 367.97it/s]  
+Loading weights: 34%|███▍ | 679/2009 [00:03<00:03, 347.65it/s]  
+Loading weights: 36%|███▌ | 722/2009 [00:03<00:03, 360.33it/s]  
+Loading weights: 38%|███▊ | 759/2009 [00:03<00:03, 349.31it/s]  
+Loading weights: 40%|████ | 806/2009 [00:03<00:03, 368.43it/s]  
+Loading weights: 42%|████▏ | 844/2009 [00:03<00:03, 348.73it/s]  
+Loading weights: 44%|████▍ | 887/2009 [00:03<00:03, 359.04it/s]  
+Loading weights: 46%|████▌ | 924/2009 [00:03<00:03, 351.97it/s]  
+Loading weights: 48%|████▊ | 971/2009 [00:03<00:02, 369.33it/s]  
+Loading weights: 50%|█████ | 1009/2009 [00:04<00:02, 350.23it/s]  
+Loading weights: 52%|█████▏ | 1052/2009 [00:04<00:02, 363.51it/s]  
+Loading weights: 54%|█████▍ | 1089/2009 [00:04<00:02, 352.69it/s]  
+Loading weights: 57%|█████▋ | 1136/2009 [00:04<00:02, 372.40it/s]  
+Loading weights: 58%|█████▊ | 1174/2009 [00:04<00:02, 349.51it/s]  
+Loading weights: 61%|██████ | 1217/2009 [00:04<00:02, 361.11it/s]  
+Loading weights: 62%|██████▏ | 1254/2009 [00:04<00:02, 348.79it/s]  
+Loading weights: 65%|██████▍ | 1301/2009 [00:04<00:02, 353.19it/s]  
+Loading weights: 67%|██████▋ | 1337/2009 [00:04<00:01, 345.29it/s]  
+Loading weights: 69%|██████▊ | 1381/2009 [00:05<00:01, 361.32it/s]  
+Loading weights: 71%|███████ | 1418/2009 [00:05<00:01, 350.08it/s]  
+Loading weights: 73%|███████▎ | 1466/2009 [00:05<00:01, 372.76it/s]  
+Loading weights: 75%|███████▍ | 1504/2009 [00:05<00:01, 349.45it/s]  
+Loading weights: 77%|███████▋ | 1546/2009 [00:05<00:01, 356.79it/s]  
+Loading weights: 79%|███████▊ | 1582/2009 [00:05<00:01, 344.44it/s]  
+Loading weights: 81%|████████ | 1631/2009 [00:05<00:01, 368.38it/s]  
+Loading weights: 84%|████████▍ | 1689/2009 [00:05<00:00, 425.45it/s]  
+Loading weights: 89%|████████▉ | 1794/2009 [00:05<00:00, 599.52it/s]  
+Loading weights: 95%|█████████▍| 1900/2009 [00:06<00:00, 728.80it/s]  
+Loading weights: 100%|█████████▉| 2007/2009 [00:06<00:00, 804.61it/s]  
+Loading weights: 100%|██████████| 2009/2009 [00:06<00:00, 323.84it/s]  
+Decompressing model: 0%| | 0/410 [00:00<?, ?it/s]  
+Decompressing model: 3%|▎ | 12/410 [00:00<00:03, 115.34it/s]  
+Decompressing model: 8%|▊ | 33/410 [00:00<00:02, 165.21it/s]  
+Decompressing model: 12%|█▏ | 50/410 [00:00<00:02, 165.80it/s]  
+Decompressing model: 17%|█▋ | 69/410 [00:00<00:01, 172.95it/s]  
+Decompressing model: 21%|██▏ | 88/410 [00:00<00:01, 177.09it/s]  
+Decompressing model: 27%|██▋ | 109/410 [00:00<00:01, 183.06it/s]  
+Decompressing model: 31%|███ | 128/410 [00:00<00:01, 183.18it/s]  
+Decompressing model: 36%|███▌ | 148/410 [00:00<00:01, 187.72it/s]  
+Decompressing model: 41%|████ | 167/410 [00:00<00:01, 181.96it/s]  
+Decompressing model: 45%|████▌ | 186/410 [00:01<00:01, 181.62it/s]  
+Decompressing model: 50%|█████ | 205/410 [00:01<00:01, 179.23it/s]  
+Decompressing model: 55%|█████▍ | 225/410 [00:01<00:01, 184.70it/s]  
+Decompressing model: 60%|█████▉ | 244/410 [00:01<00:00, 183.99it/s]  
+Decompressing model: 64%|██████▍ | 264/410 [00:01<00:00, 188.57it/s]  
+Decompressing model: 69%|██████▉ | 283/410 [00:01<00:00, 185.44it/s]  
+Decompressing model: 74%|███████▎ | 302/410 [00:01<00:00, 181.88it/s]  
+Decompressing model: 79%|███████▊ | 322/410 [00:01<00:00, 183.94it/s]  
+Decompressing model: 83%|████████▎ | 341/410 [00:01<00:00, 182.82it/s]  
+Decompressing model: 88%|████████▊ | 361/410 [00:01<00:00, 186.89it/s]  
+Decompressing model: 93%|█████████▎| 380/410 [00:02<00:00, 183.96it/s]  
+Decompressing model: 97%|█████████▋| 399/410 [00:02<00:00, 183.31it/s]  
+Decompressing model: 100%|██████████| 410/410 [00:02<00:00, 180.30it/s]  
+ CompressedLinear: 0  
+ model.language_model.layers.0.self_attn.q_proj: Linear, forward=Linear.forward  
+ weight_scale: (8192, 168) torch.bfloat16  
+ weight_shape: (2,) torch.int64  
+ weight: (8192, 5376) torch.bfloat16  
+ quantization_status=QuantizationStatus.DECOMPRESSED  
+ VRAM после загрузки: allocated=60.0 reserved=70.2 / 79.3 GB (пик 60.8)  
+ LoRA: 410 слоёв, обучаемых параметров 244,858,880 (~467 МБ в bf16)  
+ VRAM после LoRA: allocated=60.4 reserved=65.8 / 79.3 GB (пик 60.8)  
+ ходов: обучение 816, оценка 168, с обрезанной историей 457, отброшено длинных 1  
+ шагов оптимизатора 204  
+ eval до обучения: разность logp удачных и неудачных -- отложенные задачи -0.0257, обучающие 0.0119  
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.  
+epoch 0 step 2/204 pg 0.0855 kl 0.00050 lr 6.00e-06  
+ VRAM шаг 2: allocated=61.5 reserved=77.5 / 79.3 GB (пик 72.0)  
+epoch 0 step 4/204 pg -0.1361 kl 0.00130 lr 9.99e-06  
+ VRAM шаг 4: allocated=61.5 reserved=78.3 / 79.3 GB (пик 72.2)  
+epoch 0 step 6/204 pg -0.0349 kl 0.00062 lr 1.40e-05  
+ VRAM шаг 6: allocated=61.4 reserved=78.3 / 79.3 GB (пик 72.2)  
+epoch 0 step 8/204 pg 0.1627 kl 0.00085 lr 1.79e-05  
+ VRAM шаг 8: allocated=61.5 reserved=78.3 / 79.3 GB (пик 72.2)  
+epoch 0 step 10/204 pg -0.0868 kl 0.00116 lr 1.99e-05  
+ VRAM шаг 10: allocated=61.5 reserved=78.3 / 79.3 GB (пик 72.2)  
+epoch 0 step 12/204 pg 0.2351 kl 0.00320 lr 1.98e-05  
+ VRAM шаг 12: allocated=61.5 reserved=78.3 / 79.3 GB (пик 72.2)  
+epoch 0 step 14/204 pg -0.1194 kl 0.00313 lr 1.98e-05  
+ VRAM шаг 14: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 16/204 pg 0.0590 kl 0.00293 lr 1.97e-05  
+ VRAM шаг 16: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 18/204 pg 0.0973 kl 0.00522 lr 1.96e-05  
+ VRAM шаг 18: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 20/204 pg -0.1104 kl 0.00759 lr 1.95e-05  
+ VRAM шаг 20: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 22/204 pg 0.1257 kl 0.01743 lr 1.94e-05  
+ VRAM шаг 22: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 24/204 pg 0.0080 kl 0.01594 lr 1.93e-05  
+ VRAM шаг 24: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 26/204 pg 0.0136 kl 0.02864 lr 1.92e-05  
+ VRAM шаг 26: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 28/204 pg 0.0222 kl 0.20057 lr 1.91e-05  
+ VRAM шаг 28: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 30/204 pg 0.1574 kl 0.04251 lr 1.90e-05  
+ VRAM шаг 30: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 32/204 pg -0.0987 kl 0.01676 lr 1.88e-05  
+ VRAM шаг 32: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 34/204 pg 0.0299 kl 0.02183 lr 1.87e-05  
+ VRAM шаг 34: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 36/204 pg 0.0226 kl 0.01916 lr 1.85e-05  
+ VRAM шаг 36: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 38/204 pg -0.0439 kl 0.02155 lr 1.83e-05  
+ VRAM шаг 38: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 40/204 pg -0.0220 kl 0.01615 lr 1.82e-05  
+ VRAM шаг 40: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 42/204 pg -0.1150 kl 0.01277 lr 1.80e-05  
+ VRAM шаг 42: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 44/204 pg -0.0344 kl 0.03310 lr 1.78e-05  
+ VRAM шаг 44: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 46/204 pg 0.0400 kl 0.01670 lr 1.76e-05  
+ VRAM шаг 46: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 48/204 pg 0.0772 kl 0.00948 lr 1.74e-05  
+ VRAM шаг 48: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 50/204 pg 0.0342 kl 0.01318 lr 1.72e-05  
+ VRAM шаг 50: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 52/204 pg 0.0627 kl 0.05962 lr 1.70e-05  
+ VRAM шаг 52: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 54/204 pg 0.1745 kl 0.01356 lr 1.67e-05  
+ VRAM шаг 54: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 56/204 pg 0.0523 kl 0.02937 lr 1.65e-05  
+ VRAM шаг 56: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 58/204 pg -0.1563 kl 0.01422 lr 1.63e-05  
+ VRAM шаг 58: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 60/204 pg -0.1280 kl 0.02023 lr 1.60e-05  
+ VRAM шаг 60: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 62/204 pg -0.1068 kl 0.02204 lr 1.58e-05  
+ VRAM шаг 62: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 64/204 pg 0.0472 kl 0.02289 lr 1.55e-05  
+ VRAM шаг 64: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 66/204 pg -0.0555 kl 0.01053 lr 1.53e-05  
+ VRAM шаг 66: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 68/204 pg -0.0508 kl 0.01039 lr 1.50e-05  
+ VRAM шаг 68: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 70/204 pg -0.1102 kl 0.02232 lr 1.47e-05  
+ VRAM шаг 70: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 72/204 pg 0.1184 kl 0.01397 lr 1.45e-05  
+ VRAM шаг 72: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 74/204 pg 0.0397 kl 0.01074 lr 1.42e-05  
+ VRAM шаг 74: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 76/204 pg -0.1794 kl 0.01590 lr 1.39e-05  
+ VRAM шаг 76: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 78/204 pg 0.1284 kl 0.01040 lr 1.36e-05  
+ VRAM шаг 78: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 80/204 pg -0.0302 kl 0.01825 lr 1.33e-05  
+ VRAM шаг 80: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 82/204 pg -0.0749 kl 0.01149 lr 1.30e-05  
+ VRAM шаг 82: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 84/204 pg -0.0489 kl 0.01270 lr 1.27e-05  
+ VRAM шаг 84: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 86/204 pg 0.0202 kl 0.00720 lr 1.24e-05  
+ VRAM шаг 86: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 88/204 pg -0.1410 kl 0.01695 lr 1.21e-05  
+ VRAM шаг 88: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 90/204 pg -0.0044 kl 0.01312 lr 1.18e-05  
+ VRAM шаг 90: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 92/204 pg -0.0874 kl 0.02592 lr 1.15e-05  
+ VRAM шаг 92: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 94/204 pg 0.1622 kl 0.02161 lr 1.12e-05  
+ VRAM шаг 94: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 96/204 pg -0.0732 kl 0.02415 lr 1.09e-05  
+ VRAM шаг 96: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 98/204 pg 0.1004 kl 0.01393 lr 1.06e-05  
+ VRAM шаг 98: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 100/204 pg -0.0458 kl 0.01485 lr 1.03e-05  
+ VRAM шаг 100: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 0 step 102/204 pg -0.0290 kl 0.01522 lr 1.00e-05  
+ VRAM шаг 102: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+ eval после эпохи 0: разность logp удачных и неудачных -- отложенные задачи -0.0249, обучающие 0.0360  
+epoch 1 step 104/204 pg -0.0201 kl 0.01752 lr 9.69e-06  
+ VRAM шаг 104: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 106/204 pg -0.0564 kl 0.02043 lr 9.38e-06  
+ VRAM шаг 106: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 108/204 pg 0.0374 kl 0.01960 lr 9.08e-06  
+ VRAM шаг 108: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 110/204 pg 0.1585 kl 0.01669 lr 8.77e-06  
+ VRAM шаг 110: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 112/204 pg -0.0481 kl 0.01893 lr 8.47e-06  
+ VRAM шаг 112: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 114/204 pg -0.0343 kl 0.03639 lr 8.16e-06  
+ VRAM шаг 114: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 116/204 pg -0.0234 kl 0.09284 lr 7.86e-06  
+ VRAM шаг 116: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 118/204 pg 0.1513 kl 0.02232 lr 7.56e-06  
+ VRAM шаг 118: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 120/204 pg -0.0413 kl 0.01271 lr 7.26e-06  
+ VRAM шаг 120: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 122/204 pg 0.1513 kl 0.02350 lr 6.97e-06  
+ VRAM шаг 122: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 124/204 pg -0.0481 kl 0.02730 lr 6.68e-06  
+ VRAM шаг 124: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 126/204 pg 0.0685 kl 0.02262 lr 6.39e-06  
+ VRAM шаг 126: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 128/204 pg 0.0730 kl 0.02823 lr 6.10e-06  
+ VRAM шаг 128: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 130/204 pg -0.0252 kl 0.01882 lr 5.82e-06  
+ VRAM шаг 130: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 132/204 pg 0.0734 kl 0.01662 lr 5.54e-06  
+ VRAM шаг 132: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 134/204 pg 0.0663 kl 0.03771 lr 5.27e-06  
+ VRAM шаг 134: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 136/204 pg 0.0707 kl 0.02737 lr 5.00e-06  
+ VRAM шаг 136: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 138/204 pg -0.1214 kl 0.03281 lr 4.74e-06  
+ VRAM шаг 138: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 140/204 pg -0.1091 kl 0.05178 lr 4.48e-06  
+ VRAM шаг 140: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 142/204 pg -0.0701 kl 0.02345 lr 4.22e-06  
+ VRAM шаг 142: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 144/204 pg -0.0510 kl 0.01806 lr 3.97e-06  
+ VRAM шаг 144: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 146/204 pg 0.0915 kl 0.02717 lr 3.73e-06  
+ VRAM шаг 146: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 148/204 pg -0.0580 kl 0.03329 lr 3.49e-06  
+ VRAM шаг 148: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 150/204 pg -0.0825 kl 0.02006 lr 3.26e-06  
+ VRAM шаг 150: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 152/204 pg 0.0096 kl 574.56962 lr 3.04e-06  
+ VRAM шаг 152: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 154/204 pg -0.0023 kl 0.03046 lr 2.82e-06  
+ VRAM шаг 154: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 156/204 pg -0.0686 kl 0.02866 lr 2.61e-06  
+ VRAM шаг 156: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 158/204 pg -0.0855 kl 0.03495 lr 2.41e-06  
+ VRAM шаг 158: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 160/204 pg -0.0532 kl 0.06487 lr 2.21e-06  
+ VRAM шаг 160: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 162/204 pg 0.1122 kl 0.01553 lr 2.02e-06  
+ VRAM шаг 162: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 164/204 pg -0.0377 kl 0.03043 lr 1.84e-06  
+ VRAM шаг 164: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 166/204 pg 0.1239 kl 0.02149 lr 1.66e-06  
+ VRAM шаг 166: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 168/204 pg -0.1557 kl 0.03952 lr 1.50e-06  
+ VRAM шаг 168: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 170/204 pg -0.1642 kl 0.02675 lr 1.34e-06  
+ VRAM шаг 170: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 172/204 pg -0.1922 kl 0.01744 lr 1.19e-06  
+ VRAM шаг 172: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 174/204 pg -0.0927 kl 0.02920 lr 1.05e-06  
+ VRAM шаг 174: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 176/204 pg -0.0136 kl 0.03219 lr 9.15e-07  
+ VRAM шаг 176: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 178/204 pg -0.1873 kl 0.42490 lr 7.91e-07  
+ VRAM шаг 178: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 180/204 pg -0.0680 kl 0.04927 lr 6.75e-07  
+ VRAM шаг 180: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 182/204 pg 0.0085 kl 0.02300 lr 5.68e-07  
+ VRAM шаг 182: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 184/204 pg -0.0569 kl 0.04327 lr 4.71e-07  
+ VRAM шаг 184: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 186/204 pg -0.0819 kl 0.02528 lr 3.82e-07  
+ VRAM шаг 186: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 188/204 pg -0.1826 kl 0.08098 lr 3.02e-07  
+ VRAM шаг 188: allocated=61.4 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 190/204 pg -0.1134 kl 0.14595 lr 2.32e-07  
+ VRAM шаг 190: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 192/204 pg -0.0894 kl 0.01685 lr 1.70e-07  
+ VRAM шаг 192: allocated=61.5 reserved=78.4 / 79.3 GB (пик 72.2)  
+epoch 1 step 194/204 pg 0.1422 kl 0.01878 lr 1.18e-07  
+ VRAM шаг 194: allocated=61.5 reserved=78.6 / 79.3 GB (пик 72.2)  
+epoch 1 step 196/204 pg -0.0198 kl 0.03107 lr 7.58e-08  
+ VRAM шаг 196: allocated=61.5 reserved=78.6 / 79.3 GB (пик 72.2)  
+epoch 1 step 198/204 pg 0.0415 kl 0.02621 lr 4.27e-08  
+ VRAM шаг 198: allocated=61.4 reserved=78.6 / 79.3 GB (пик 72.2)  
+epoch 1 step 200/204 pg -0.0323 kl 0.01559 lr 1.90e-08  
+ VRAM шаг 200: allocated=61.5 reserved=78.6 / 79.3 GB (пик 72.2)  
+epoch 1 step 202/204 pg 0.0631 kl 0.03108 lr 4.74e-09  
+ VRAM шаг 202: allocated=61.5 reserved=78.6 / 79.3 GB (пик 72.2)  
+epoch 1 step 204/204 pg 0.0494 kl 0.02928 lr 0.00e+00  
+ VRAM шаг 204: allocated=61.5 reserved=78.6 / 79.3 GB (пик 72.2)  
+ eval после эпохи 1: разность logp удачных и неудачных -- отложенные задачи -0.0246, обучающие 0.0501  
+ сохранено adapters/pg_v13_b (410 слоёв, 467 МБ)

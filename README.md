@@ -28,6 +28,7 @@ Using an NLL-anchored pairwise loss, our preference adapter completely eliminate
 │   ├── build_pref_onpolicy.py  # Constructs on-policy preference pairs from sometimes-solved tasks
 │   ├── pref_lora.py            # Reference-free and reference-based pairwise LoRA training script
 │   └── manual_lora_qat.py      # QAT w4a16 LoRA workaround for transformers 5.x on 1x A100 80GB
+├── evaluation/                 # Raw agent execution logs and 312 analyzed episodes (§3)
 ├── sim/
 │   └── mimo_server.py          # Docker sandbox server for local environment rollouts
 └── notebooks/

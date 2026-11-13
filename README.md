@@ -33,7 +33,7 @@ Using an NLL-anchored pairwise loss, our preference adapter completely eliminate
 └── notebooks/
     ├── colab_pref.ipynb        # Interactive pipeline for preference data curation
     └── colab_pref_onpolicy.ipynb # On-policy rollout collection notebook
-
+```
 ---
 
 ## ⚙️ Key Technical Highlights

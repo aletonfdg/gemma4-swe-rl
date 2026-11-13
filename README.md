@@ -34,12 +34,16 @@ Using an NLL-anchored pairwise loss, our preference adapter completely eliminate
     ├── colab_pref.ipynb        # Interactive pipeline for preference data curation
     └── colab_pref_onpolicy.ipynb # On-policy rollout collection notebook
 
-⚙️ Key Technical Highlights
+---
+
+##⚙️ Key Technical Highlights
  * Failure Census (§3): Systematic analysis of 312 agent episodes revealing that formatting defects (\n escapes) and infinite test-script creation loops (/tmp/repro*.py) dominate 31B agent failures.
  * Minimal-Difference Pairs (§4.1): Pairs sharing the system prompt, trimmed history (\le 8,192 tokens), and reasoning block (reasoning_content), isolating the gradient updates strictly to the defect.
  * QAT w4a16 LoRA Workaround (§4.3): A single-GPU memory recipe for transformers 5.x and compressed-tensors that decompresses packed weights via run_compressed=False and computes gradients in a memory-efficient three-pass scheme, fitting within 72 GB VRAM on an A100 80GB.
 
-Quick Start & Reproduction
+---
+
+##Quick Start & Reproduction
 Prerequisites
  * Python 3.10+
  * PyTorch with CUDA support
@@ -61,14 +65,18 @@ python train/pref_lora.py \
     --lora_alpha 64 \
     --learning_rate 3e-5
 
-📊 Summary of Results
+---
+
+##📊 Summary of Results
 | Model / Configuration | Edit Defect Rate (\text{literal } \textbackslash n) | Public Leaderboard Score (58 tasks) |
 |---|---|---|
 | Base Gemma 4 31B-it (Prompt P1) | 28% | 0.15 |
 | Standard SFT Adapter | 48% | — |
 | Our Preference Adapter (pref_edit_v1) | 0% | 0.20 |
 
-Training Code Snapshot & Artifacts
+---
+
+##Training Code Snapshot & Artifacts
 The full training snapshots and configuration logs are available via Google Drive (public link):
  * Training Code & Log Snapshot (Google Drive)
 Citation
@@ -82,7 +90,9 @@ If you find this repository or our findings useful in your research, please cite
   howpublished = {\url{[https://github.com/aletonfdg/gemma4-swe-rl](https://github.com/aletonfdg/gemma4-swe-rl)}}
 }
 
-License
+---
+
+##License
 Distributed under the Apache 2.0 License. See LICENSE for more information.
 
 

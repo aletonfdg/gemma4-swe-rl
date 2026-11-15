@@ -1,94 +1,120 @@
 # Gemma 4 SWE-RL: Fix the Failure, Not the Trajectory
 
-> **Minimal-difference preference adapters for a 31B on-device coding agent: a gain where imitation fine-tuning gave none**
+> Minimal-difference preference adapters for a 31B on-device coding agent.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Model: Gemma 4 31B QAT](https://img.shields.io/badge/Model-Gemma%204%2031B%20QAT-orange.svg)]()
+[![Model: Gemma 4 31B QAT](https://img.shields.io/badge/Model-Gemma%204%2031B%20QAT-orange.svg)](#)
 
-Official implementation and training scripts for our paper submitted to the **Google - The Gemma 4 Developer Agent Paper Track**.
+Code for our paper submitted to the **Google - The Gemma 4 Developer Agent Paper Track**.
+Paper: https://www.kaggle.com/competitions/gemma-4-developer-agent-paper/writeups/fix-the-failure-not-the-trajectory
 
----
+## Summary
 
-## Abstract
+Auditing 312 episodes of a Gemma 4 31B agent, we found that **28% of `edit_file` calls
+contain a literal `\n` instead of a real newline, and 98% of those calls fail** (6 of 247 applied).
+We train a LoRA adapter on 188 *minimal-difference* preference pairs: chosen and rejected share
+the whole context and reasoning and differ only in one tool call's arguments. The loss is a
+pairwise preference term plus an NLL anchor on the chosen call.
 
-A common view in the Gemma 4 Developer Agent competition is that LoRA adapters do not help: SFT and distillation adapters failed to beat prompt-only agents, and adapters slow down decoding. In this work, we reproduce the negative result for standard SFT and show that it does not extend to every adapter. 
+- Defect rate on locally generated calls: **28% → 0%** (SFT adapter: 48%).
+- Public leaderboard (58 tasks, 1 task ≈ 0.017): **0.15 → 0.20** under prompt P1 and
+  **0.15 → 0.17** under prompt P2. These are one-to-three-task differences, within
+  leaderboard noise, so we read them as *consistent with* a gain, not as proof.
+- Cost: decoding is about 20% slower (27.5 vs 34 tok/s).
 
-By auditing 312 agent episodes, we discovered a major mechanical defect: **28% of `edit_file` calls contain literal `\n` string escapes instead of real newlines**, causing 98% of those calls to fail. To fix this without diluting the gradient over thousands of well-formed reasoning tokens, we introduce **minimal-difference preference adapters** trained on 188 pairs that share the entire context and reasoning, differing *only* in the problematic tool call arguments. 
-
-Using an NLL-anchored pairwise loss, our preference adapter completely eliminates the format defect (28% $\to$ 0%) and improves the public leaderboard score from **0.15 to 0.20**.
-
----
-
-## Repository Structure
+## Repository structure
 
 ```text
 .
 ├── train/
-│   ├── build_pref_data.py      # Builds real_fix and synthetic minimal-difference pairs
-│   ├── build_pref_onpolicy.py  # Constructs on-policy preference pairs from sometimes-solved tasks
-│   ├── pref_lora.py            # Reference-free and reference-based pairwise LoRA training script
-│   └── manual_lora_qat.py      # QAT w4a16 LoRA workaround for transformers 5.x on 1x A100 80GB
-├── evaluation/                 # Raw agent execution logs and 312 analyzed episodes (§3)
-├── sim/
-│   └── mimo_server.py          # Docker sandbox server for local environment rollouts
-├── colab_pref.ipynb        # Interactive pipeline for preference data curation
-└── colab_pref_onpolicy.ipynb # On-policy rollout collection notebook
+│   ├── build_pref_data.py      # builds real_fix and synthetic minimal-difference pairs
+│   ├── build_pref_onpolicy.py  # builds on-policy pairs from sometimes-solved tasks
+│   ├── pref_lora.py            # pairwise LoRA training (reference-free and reference variants)
+│   └── manual_lora_qat.py      # LoRA workaround for a QAT w4a16 checkpoint on one A100 80GB
+├── sim/mimo_server.py          # Docker sandbox server for local rollouts
+├── evaluation/                 # TODO: describe exactly what is stored here (see "Data" below)
+├── data/                       # TODO: describe
+├── submission_*/               # submission packages (v1 no-adapter ... v5)
+├── colab_pref.ipynb            # preference data curation + training
+├── colab_collect_sometimes.ipynb
+├── colab_pref_onpolicy.ipynb
+├── requirements.txt
+└── README.md
 ```
----
 
-## ⚙️ Key Technical Highlights
- * Failure Census (§3): Systematic analysis of 312 agent episodes revealing that formatting defects (\n escapes) and infinite test-script creation loops (/tmp/repro*.py) dominate 31B agent failures.
- * Minimal-Difference Pairs (§4.1): Pairs sharing the system prompt, trimmed history (\le 8,192 tokens), and reasoning block (reasoning_content), isolating the gradient updates strictly to the defect.
- * QAT w4a16 LoRA Workaround (§4.3): A single-GPU memory recipe for transformers 5.x and compressed-tensors that decompresses packed weights via run_compressed=False and computes gradients in a memory-efficient three-pass scheme, fitting within 72 GB VRAM on an A100 80GB.
+## Requirements
 
----
+- Python 3.10+
+- PyTorch with CUDA
+- 1x NVIDIA A100 80 GB for training (peak about 72 GB at 8,192 tokens)
+- Docker for sandbox rollouts
 
-## Quick Start & Reproduction
-Prerequisites
- * Python 3.10+
- * PyTorch with CUDA support
- * 1x NVIDIA A100 (80GB VRAM recommended for QAT LoRA training)
-1. Installatio
+## Quick start
+
 ```bash
-git clone [https://github.com/aletonfdg/gemma4-swe-rl.git](https://github.com/aletonfdg/gemma4-swe-rl.git)
+git clone https://github.com/aletonfdg/gemma4-swe-rl.git
 cd gemma4-swe-rl
-pip install -r requirements.txt # or uv sync
+pip install -r requirements.txt
 ```
-2. Build Preference Datasets
+
+**1. Build preference pairs** from your own episode logs:
+
 ```bash
-python train/build_pref_data.py --logs_dir ./logs --output_dir ./data/pairs
+python train/build_pref_data.py --logs_dir <PATH_TO_YOUR_EPISODE_LOGS> --output_dir ./data/pairs
 ```
-3. Train Preference Adapter
+
+**2. Train the adapter** (about 4 GPU-hours on an A100 80 GB):
+
 ```bash
 python train/pref_lora.py \
-    --model_name_or_path "google/gemma-4-31b-it-qat-w4a16-ct" \
-    --data_path "./data/pairs/edit_pairs.json" \
-    --output_dir "./adapters/pref_edit_v1" \
-    --lora_r 32 \
-    --lora_alpha 64 \
-    --learning_rate 3e-5
+  --model_name_or_path "google/gemma-4-31b-it-qat-w4a16-ct" \
+  --data_path "./data/pairs/edit_pairs.json" \
+  --output_dir "./adapters/pref_edit_v1" \
+  --lora_r 32 --lora_alpha 64 --learning_rate 3e-5
 ```
----
 
-## 📊 Summary of Results
-| Model / Configuration | Edit Defect Rate (\text{literal } \textbackslash n) | Public Leaderboard Score (58 tasks) |
-|---|---|---|
-| Base Gemma 4 31B-it (Prompt P1) | 28% | 0.15 |
-| Standard SFT Adapter | 48% | — |
-| Our Preference Adapter (pref_edit_v1) | 0% | 0.20 |
+Other settings from the paper: beta = 0.1, NLL weight = 0.2, grad-accum 8, one epoch with each pair repeated twice.
 
----
+## Data
 
-## 📖 Citation
+Pairs and logs derived from competition tasks are **not redistributed** (competition rules),
+so the repository contains the builders, not the data. Adapter weights are not released;
+the pipeline regenerates them from your own episode logs.
+TODO: make sure `evaluation/` does not contain raw competition logs or task text.
 
-If you build upon this work, use our minimal-difference preference pairs, or find our findings useful in your research, please cite it as follows:
+## Results
+
+| Configuration | Prompt | Literal `\n` in `edit_file` | Leaderboard (58 tasks) |
+|---|---|---|---|
+| Base Gemma 4 31B-it | P1 | 28% | 0.15 |
+| SFT adapter (own solved runs) | – | 48% | – |
+| `pref_edit_v1` | P1 | 0% | 0.20 |
+| Base | P2 | – | 0.15 |
+| `pref_edit` retrained under P2 | P2 | – | 0.17 |
+
+The 0% rate comes from a small local check (22 held-out pairs for pair accuracy).
+Repeated submission of the same package varies by about 3–5 points, so use the defect rate
+and held-out pair accuracy as the main evidence, not the leaderboard.
+
+## Limitations
+
+- Two paired leaderboard comparisons on 58 tasks, differing by one to three tasks.
+- The census and `real_fix` pairs come from logs on the public tasks; overlap with the
+  leaderboard tasks is not verified.
+- Pair type and the reference term vary together in the on-policy ablation.
+- One model, one harness, one defect.
+
+## Citation
 
 ```bibtex
 @misc{aleton2026fixfailure,
-  author = {Aleksey Vishnevskiy},
-  title = {Fix the Failure, Not the Trajectory: Minimal-difference preference adapters for a 31B on-device coding agent},
-  year = {2026},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{[https://github.com/aletonfdg/gemma4-swe-rl](https://github.com/aletonfdg/gemma4-swe-rl)}}
+  author       = {Aleksey Vishnevskiy},
+  title        = {Fix the Failure, Not the Trajectory: Minimal-difference preference adapters for a 31B on-device coding agent},
+  year         = {2026},
+  howpublished = {\url{https://github.com/aletonfdg/gemma4-swe-rl}}
 }
+```
+
+## License
+
+Apache 2.0
